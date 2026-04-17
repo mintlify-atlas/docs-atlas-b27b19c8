@@ -1,0 +1,188 @@
+---
+title: "Extend and customize newsroom page modules"
+description: "How to customize Stories, Category, Galleries, and Story modules, switch between pagination strategies, and extend ContentRenderer with custom node renderers."
+---
+
+The newsroom is organized into self-contained feature modules under the `modules/` directory. Each module owns its own data-fetching logic, UI components, and sub-components, making it straightforward to modify a single feature area without touching the rest of the codebase. The `components/` directory holds lower-level shared building blocks — `ContentRenderer`, `Pagination`, and `StoryPublicationDate` — that modules compose together.
+
+## Module directory structure
+
+```
+modules/
+├── InfiniteStories/     # Infinite-scroll variant for the homepage story list
+├── Layout/              # Global page shell (Header, Footer, SubscribeForm)
+├── PaginatedStories/    # Page-number variant for the homepage story list
+├── Stories/             # Homepage module — chooses between paginated and infinite
+├── StoriesList/         # Renders a flat list of story card links
+└── ...                  # Category, Story, Media, Search, etc.
+
+components/
+├── ContentRenderer/     # Wraps @prezly/content-renderer-react-js for story body rendering
+├── Pagination/          # Page-number navigation UI
+└── StoryPublicationDate/
+```
+
+Every module exports its public surface through an `index.ts` file, so you import from `@/modules/Stories` rather than from a specific file path inside the module.
+
+## BasePageProps
+
+All page-level `getServerSideProps` functions augment the standard Prezly page props with your own `BasePageProps` type, defined in `types.ts`:
+
+```typescript types.ts
+export interface BasePageProps {
+    translations: Record<string, any>;
+}
+```
+
+This interface is merged with the Prezly-provided `PageProps` (which carries `newsroomContextProps`) in `_app.tsx`. When you need to pass additional data from `getServerSideProps` to a page component — such as a resolved category slug or a featured story — extend `BasePageProps` here and add the field to your server-side props function.
+
+## StoriesList module
+
+`modules/StoriesList/StoriesList.tsx` renders a plain list of story links. It accepts a `stories` array of Prezly `Story` objects and renders each one as a Next.js `<Link>` anchored to `/${story.slug}`.
+
+```tsx modules/StoriesList/StoriesList.tsx
+import type { Story } from '@prezly/sdk';
+import Link from 'next/link';
+
+interface Props {
+    stories: Story[];
+}
+
+export function StoriesList({ stories }: Props) {
+    return (
+        <>
+            {stories.map((story) => (
+                <Link
+                    key={story.uuid}
+                    href={`/${story.slug}`}
+                    style={{ display: 'block', marginBottom: 20 }}
+                >
+                    <span>{story.title}</span>
+                </Link>
+            ))}
+        </>
+    );
+}
+```
+
+By default this renders only the story title. To build a richer story card — with a thumbnail, publication date, category label, or excerpt — extend `StoriesList.tsx` to access additional fields on the `Story` object. The `StoryPublicationDate` component from `components/` is available for formatted dates.
+
+<Note>
+  The `Story` type comes from `@prezly/sdk` and includes fields such as `header_image`, `summary`, `categories`, `published_at`, and `author`. You can destructure any of these inside the `map` callback.
+</Note>
+
+## PaginatedStories vs InfiniteStories
+
+The homepage `Stories` module (`modules/Stories/Stories.tsx`) lets you switch between two story-loading strategies by commenting or uncommenting a single line:
+
+```tsx modules/Stories/Stories.tsx
+import { PaginatedStories } from '../PaginatedStories';
+// import { InfiniteStories } from '../InfiniteStories';
+
+export function Stories({ stories, pagination }: Props) {
+    return (
+        <Layout>
+            <h1>Hello Prezly 👋</h1>
+
+            {/* Switch to infinite scroll by replacing the line below: */}
+            <PaginatedStories stories={stories} pagination={pagination} />
+            {/* <InfiniteStories initialStories={stories} pagination={pagination} /> */}
+        </Layout>
+    );
+}
+```
+
+<Steps>
+  <Step title="Choose your loading strategy">
+    Decide whether you want page-number navigation (`PaginatedStories`) or continuous scroll (`InfiniteStories`). The two modules share the same `stories` and `pagination` prop interface, so the switch is a one-line change.
+  </Step>
+  <Step title="Comment out PaginatedStories">
+    Remove or comment the `<PaginatedStories ... />` line.
+  </Step>
+  <Step title="Uncomment InfiniteStories">
+    Remove the comment markers around `<InfiniteStories initialStories={stories} pagination={pagination} />`.
+  </Step>
+  <Step title="Remove the unused import">
+    Remove the `import { PaginatedStories }` line to keep the module clean.
+  </Step>
+</Steps>
+
+Both modules accept the same `PaginationProps` type from `@prezly/theme-kit-nextjs`, which carries `itemsTotal`, `currentPage`, and `pageSize`. The data-fetching layer (in `pages/index.tsx` via `getHomepageServerSideProps`) does not change.
+
+## Pagination component
+
+`components/Pagination/Pagination.tsx` renders a page-number navigation bar. It accepts `PaginationProps` and renders nothing when `totalPages <= 1`.
+
+```tsx components/Pagination/Pagination.tsx
+export function Pagination({ itemsTotal, currentPage, pageSize }: PaginationProps) {
+    const totalPages = Math.ceil(itemsTotal / pageSize);
+
+    if (totalPages <= 1) {
+        return null;
+    }
+
+    // renders: Previous  1  ...  4  [5]  6  ...  12  Next
+}
+```
+
+The component uses an internal `getVisiblePages` helper to compute which page numbers to show around the current page, inserting ellipsis (`...`) gaps when there are skipped pages. The **Previous** and **Next** controls are rendered as `<span>` elements (non-interactive) when disabled, and as `<Link>` elements otherwise.
+
+`PaginationItem` reads the current Next.js route via `useRouter` and appends a `?page=N` query parameter to the existing pathname, preserving any other query string parameters such as a category filter.
+
+| Prop           | Type     | Description                                         |
+| -------------- | -------- | --------------------------------------------------- |
+| `itemsTotal`   | `number` | Total number of stories across all pages.           |
+| `currentPage`  | `number` | The page currently being displayed (1-indexed).     |
+| `pageSize`     | `number` | Number of stories per page.                         |
+
+## ContentRenderer component
+
+`components/ContentRenderer/ContentRenderer.tsx` wraps the `Renderer` from `@prezly/content-renderer-react-js` to render the rich content body of a story.
+
+```tsx components/ContentRenderer/ContentRenderer.tsx
+import { Component, Renderer } from '@prezly/content-renderer-react-js';
+import '@prezly/content-renderer-react-js/styles.css';
+
+interface Props {
+    nodes: Node | Node[];
+}
+
+export function ContentRenderer({ nodes }: Props) {
+    return (
+        <div>
+            <Renderer nodes={nodes} defaultComponents>
+                <Component match={VariableNode.isVariableNode} component={Variable} />
+                <Component
+                    match={StoryBookmarkNode.isStoryBookmarkNode}
+                    component={StoryBookmark}
+                />
+            </Renderer>
+        </div>
+    );
+}
+```
+
+The `defaultComponents` prop enables the full set of built-in node renderers (headings, paragraphs, images, embeds, quotes, etc.) from `@prezly/content-renderer-react-js`. Two custom node types are registered on top:
+
+<CardGroup cols={2}>
+  <Card title="Variable" icon="code">
+    Renders Prezly content variables. Currently handles `publication.date`, which outputs a formatted `StoryPublicationDate` component using the story resolved from `useCurrentStory()`.
+  </Card>
+  <Card title="StoryBookmark" icon="bookmark">
+    Renders embedded story bookmark cards. It resolves the referenced story UUID from the current story's `referenced_entities` map and delegates to `Elements.StoryBookmark` for the actual card markup.
+  </Card>
+</CardGroup>
+
+The stylesheet `@prezly/content-renderer-react-js/styles.css` is imported directly inside the component file so it is included whenever `ContentRenderer` is rendered — you do not need to add it to a global stylesheet. To override the default styles, add your own CSS rules with higher specificity after this import.
+
+<Warning>
+  To add a custom renderer for a new node type, register an additional `<Component match={...} component={...} />` inside `<Renderer>`. Do not remove `defaultComponents` — it enables all the built-in renderers for standard node types.
+</Warning>
+
+## No default styling — by design
+
+None of the modules or shared components ship with opinionated CSS beyond the bare minimum needed for functional layout (`display: block`, `margin`, `opacity`). This is intentional. You can adopt any styling approach — CSS Modules, Tailwind CSS, styled-components, or plain CSS — without fighting existing styles.
+
+<Tip>
+  Start by importing a CSS reset or your design system's base styles in `pages/_app.tsx`. Then add component-level styles where needed. Because every module is self-contained, you can style one module at a time without affecting others.
+</Tip>

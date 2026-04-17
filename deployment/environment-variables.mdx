@@ -1,0 +1,60 @@
+---
+title: "Newsroom environment variables reference"
+description: "Complete reference for all environment variables the Blevins Holdings Newsroom reads, with accepted values and local development setup instructions."
+---
+
+The newsroom is configured entirely through environment variables. There are no hard-coded credentials in the source code — you supply your Prezly API key, newsroom UUID, and optional Algolia key at runtime or build time, and the app connects to the correct newsroom automatically.
+
+## Variables
+
+<ParamField path="PREZLY_ACCESS_TOKEN" type="string" required>
+  Your Prezly API key. The app uses this to authenticate all requests to the Prezly SDK and fetch newsroom content including stories, categories, and media. You can find or generate an API key in your Prezly account under **Settings → API**.
+</ParamField>
+
+<ParamField path="PREZLY_NEWSROOM_UUID" type="string" required>
+  The UUID that identifies which newsroom to display. Each Prezly newsroom has a unique UUID. You can find it in your Prezly account under **Settings → Newsroom** or use one of the sample UUIDs from the testing table below.
+</ParamField>
+
+<ParamField path="ALGOLIA_API_KEY" type="string">
+  A search-only API key for Algolia. When this variable is set, the `/search` route becomes active and provides real-time search powered by Algolia. When it is omitted, the search page is not available. Use a **search-only** key here — never your Algolia admin key.
+</ParamField>
+
+## Local development setup
+
+For local development, create a `.env.local` file in the root of the project by copying the provided example:
+
+```bash
+cp .env.example .env.local
+```
+
+Then open `.env.local` and fill in your values:
+
+```env
+PREZLY_ACCESS_TOKEN=your_access_token_here
+PREZLY_NEWSROOM_UUID=your_newsroom_uuid_here
+ALGOLIA_API_KEY=your_algolia_search_key_here
+```
+
+<Warning>
+  Never commit `.env.local` to version control. It is already listed in `.gitignore`, but double-check before pushing to a shared repository. Committing API keys exposes your Prezly account to unauthorized access.
+</Warning>
+
+## Sample newsroom tokens
+
+To get started quickly without a Prezly account, you can use one of the sample newsrooms created for development and testing:
+
+| Name | API Token | Newsroom UUID |
+|---|---|---|
+| Good Newsroom | `HKcab_nEbab_a7b2fe3a3465d3729772fa5381800ab5a0c30d8d` | `578e78e9-9a5b-44ad-bda2-5214895ee036` |
+| Cookbook | `TKcab_nEbab_28432b75d3a85a826e51cd0b502a3d76acf98d19` | `9d90b2c1-aed9-4415-a9fb-82dd3a2a1b52` |
+| Anonymous Photographer | `SKcab_nEbab_0b63a6dd0b09286cc99fab93e6e80bfd9aecfbb5` | `ce8299f6-a293-41df-8ffc-1c064d4401bc` |
+
+Copy the **API Token** into `PREZLY_ACCESS_TOKEN` and the **Newsroom UUID** into `PREZLY_NEWSROOM_UUID` for whichever newsroom you want to preview.
+
+## What happens when credentials are missing or invalid
+
+If `PREZLY_ACCESS_TOKEN` or `PREZLY_NEWSROOM_UUID` is missing or incorrect, the app fails to initialize the newsroom context in `_app.tsx` and returns a **500 error** for all pages. You will see an error in the server logs indicating that the SDK could not authenticate or locate the specified newsroom.
+
+<Note>
+  If you see a 500 error immediately after deployment, the first thing to check is that both required environment variables are set correctly in your hosting platform's environment configuration.
+</Note>

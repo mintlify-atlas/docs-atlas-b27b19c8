@@ -1,0 +1,74 @@
+{
+  "projectType": "saas",
+  "projectName": "Blevins Holdings Newsroom",
+  "projectDescription": "A Next.js-based newsroom starter theme powered by Prezly SDK, featuring stories, categories, media galleries, multilingual support, and Algolia search.",
+  "theme": "willow",
+  "primaryColor": "#f76040",
+  "lightColor": "#13c5be",
+  "darkColor": "#a35cfb",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": ["introduction", "quickstart", "configuration"]
+          },
+          {
+            "group": "Core Features",
+            "pages": ["features/stories", "features/categories", "features/media", "features/search"]
+          },
+          {
+            "group": "Customization",
+            "pages": ["customization/layout", "customization/modules", "customization/internationalization"]
+          },
+          {
+            "group": "Deployment",
+            "pages": ["deployment/vercel", "deployment/docker", "deployment/environment-variables"]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Hooks & Utilities",
+            "pages": ["api/hooks", "api/modules", "api/components"]
+          },
+          {
+            "group": "Routes",
+            "pages": ["api/routes", "api/data-fetching"]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Homepage with paginated or infinite-scroll story listings",
+    "Individual story pages with rich content rendering (HTML and SlateJS formats)",
+    "Category pages for browsing stories by topic",
+    "Media galleries with infinite loading support",
+    "Real-time search powered by Algolia",
+    "Full internationalization (i18n) support for 40+ languages via React Intl",
+    "SEO metadata, Open Graph tags, and sitemap.xml generation",
+    "Flexible rendering: SSR, SSG, or ISR via Next.js",
+    "NewsroomContextProvider for global access to newsroom data",
+    "Docker support for containerized deployments"
+  ],
+  "publicApiSurface": [
+    "Layout component (Header, Footer, SubscribeForm, PageSeo)",
+    "Stories module (PaginatedStories, InfiniteStories)",
+    "Story module (story page rendering with ContentRenderer)",
+    "Category module (category-filtered story listings)",
+    "Galleries / Gallery modules (media album pages)",
+    "Search module (Algolia-powered InstantSearch)",
+    "StoriesList component",
+    "Pagination component",
+    "useDisplayedLanguages() hook",
+    "useInfiniteLoading() hook",
+    "getHomepageServerSideProps (from @prezly/theme-kit-nextjs)",
+    "NewsroomContextProvider (from @prezly/theme-kit-nextjs)",
+    "Routes: /, /[slug], /s/[uuid], /category/[slug], /media, /media/album/[uuid], /search, /sitemap.xml"
+  ]
+}

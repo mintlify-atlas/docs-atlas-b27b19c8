@@ -1,0 +1,81 @@
+---
+title: "Category pages for organized story browsing"
+description: "Learn how category filtering works in Blevins Holdings Newsroom — the category route, story filtering, and how the Category module is structured."
+---
+
+Category pages let readers browse your newsroom by topic. Each Prezly category maps to a dedicated URL where only stories tagged with that category appear. The listing inside a category page shares the same two-mode architecture — paginated or infinite — as the homepage.
+
+## The `/category/[slug]` route
+
+Prezly categories are served at `/category/[slug]`, where `[slug]` is the category's URL identifier set in your Prezly dashboard. The Next.js dynamic route delegates server-side data fetching to `@prezly/theme-kit-nextjs`, which resolves the category by its slug and returns only the stories belonging to it alongside pagination metadata.
+
+The resolved category and story list are passed directly into the `Category` module as props:
+
+```tsx
+// modules/Category/Category.tsx
+interface Props {
+    category: CategoryType;
+    pagination: PaginationProps;
+    stories: Story[];
+}
+```
+
+## How the Category module works
+
+The `Category` module renders the category's **display name** and **description** at the top of the page, followed by the story listing.
+
+```tsx
+// modules/Category/Category.tsx
+export function Category({ category, pagination, stories }: Props) {
+    return (
+        <Layout>
+            <h1>{category.display_name}</h1>
+            <p>{category.display_description}</p>
+
+            <PaginatedStories stories={stories} pagination={pagination} />
+        </Layout>
+    );
+}
+```
+
+`category.display_name` and `category.display_description` are locale-aware fields resolved by the Prezly SDK — they automatically reflect the visitor's active locale if you have multi-language categories configured.
+
+## Switching listing modes inside a category
+
+The category listing supports the same `PaginatedStories` / `InfiniteStories` toggle as the homepage. To enable infinite scroll inside a category page, open `modules/Category/Category.tsx` and swap the components:
+
+```tsx
+// modules/Category/Category.tsx — switching to infinite scroll
+// import { InfiniteStories } from '../InfiniteStories';
+
+export function Category({ category, pagination, stories }: Props) {
+    return (
+        <Layout>
+            <h1>{category.display_name}</h1>
+            <p>{category.display_description}</p>
+
+            {/* Remove PaginatedStories and uncomment InfiniteStories: */}
+            {/* <InfiniteStories
+                initialStories={stories}
+                pagination={pagination}
+                category={category}
+            /> */}
+            <PaginatedStories stories={stories} pagination={pagination} />
+        </Layout>
+    );
+}
+```
+
+<Note>
+Pass the `category` prop to `InfiniteStories` so that subsequent pages fetched by `useInfiniteStoriesLoading` stay scoped to the same category. Omitting it would load unfiltered stories on subsequent pages.
+</Note>
+
+## How story filtering works
+
+Story filtering happens server-side. The Prezly SDK's `getServerSideProps` helper accepts the category slug from the URL, queries the Prezly API for stories with that category, and returns a paginated subset. Your React components receive only the pre-filtered `stories` array — there is no client-side filtering logic in the `Category` module itself.
+
+## Routes summary
+
+| Route | Description |
+|---|---|
+| `/category/[slug]` | Stories filtered by a single category |

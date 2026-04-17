@@ -1,0 +1,181 @@
+---
+title: "Add multilingual support to your newsroom"
+description: "How i18n works with React Intl and Prezly translations, including locale detection, importMessages, locale routing, and the useDisplayedLanguages hook."
+---
+
+The newsroom has full internationalization (i18n) support out of the box. Every page is wrapped in a React Intl `IntlProvider`, the active locale is detected from the URL, and all UI strings are loaded from locale-specific message files provided by `@prezly/theme-kit-intl`. Prezly supports 40+ languages — enabling a new language is as simple as activating it in your newsroom dashboard.
+
+## How the providers are wired together
+
+`pages/_app.tsx` is the entry point for i18n. It wraps every page in two providers:
+
+```tsx pages/_app.tsx
+import { DEFAULT_LOCALE, LocaleObject } from '@prezly/theme-kit-core';
+import { NewsroomContextProvider } from '@prezly/theme-kit-nextjs';
+import { IntlProvider } from 'react-intl';
+import type { BasePageProps } from 'types';
+
+function App({ Component, pageProps }: AppProps) {
+    const { newsroomContextProps, translations, ...customPageProps } = pageProps as PageProps &
+        BasePageProps;
+
+    const { localeCode } = newsroomContextProps || {
+        localeCode: DEFAULT_LOCALE,
+    };
+    const locale = useMemo(() => LocaleObject.fromAnyCode(localeCode), [localeCode]);
+
+    if (!newsroomContextProps) {
+        return <Component {...customPageProps} />;
+    }
+
+    return (
+        <NewsroomContextProvider {...newsroomContextProps}>
+            <IntlProvider
+                locale={locale.toHyphenCode()}
+                defaultLocale={DEFAULT_LOCALE}
+                messages={translations}
+            >
+                <Component {...customPageProps} />
+            </IntlProvider>
+        </NewsroomContextProvider>
+    );
+}
+```
+
+<Steps>
+  <Step title="NewsroomContextProvider">
+    Receives `newsroomContextProps` (fetched by server-side helpers like `getHomepageServerSideProps`) and makes newsroom data — categories, languages, company information, Algolia settings — available to every hook from `@prezly/theme-kit-nextjs`.
+  </Step>
+  <Step title="Locale resolution">
+    `localeCode` is extracted from `newsroomContextProps`. It is converted to a `LocaleObject` via `LocaleObject.fromAnyCode()`, which accepts Prezly locale codes, ISO 639-1 codes, BCP 47 tags, and URL slugs interchangeably. When `newsroomContextProps` is unavailable (e.g., on a 500 error page), `DEFAULT_LOCALE` from `@prezly/theme-kit-core` is used as a safe fallback.
+  </Step>
+  <Step title="IntlProvider">
+    Wraps the page component with the active locale (`locale.toHyphenCode()` produces the BCP 47 hyphen format, e.g., `en-US`) and the preloaded `translations` message map. All `FormattedMessage` and `useIntl` calls inside child components resolve against this provider.
+  </Step>
+</Steps>
+
+## How locale flows through the app
+
+The `localeCode` originates on the server:
+
+```
+getServerSideProps (e.g., getHomepageServerSideProps)
+  → newsroomContextProps.localeCode  (e.g., "en_US")
+  → _app.tsx: LocaleObject.fromAnyCode(localeCode)
+  → locale.toHyphenCode()            (e.g., "en-US")
+  → IntlProvider locale prop
+  → useCurrentLocale() in any component
+```
+
+Inside any component you can access the current locale with:
+
+```tsx
+import { useCurrentLocale } from '@prezly/theme-kit-nextjs';
+
+function MyComponent() {
+    const currentLocale = useCurrentLocale(); // LocaleObject
+    return <span>{currentLocale.toNativeCode()}</span>;
+}
+```
+
+`LocaleObject` provides helpers such as `.toHyphenCode()`, `.toUrlSlug()`, `.toNativeCode()`, and `.isSameLanguage()` to format or compare locale values without string manipulation.
+
+## Loading translations with importMessages
+
+Each page's `getServerSideProps` function must preload the translation messages for the active locale and return them as `translations`. The `importMessages` utility in `utils/lang.ts` handles this:
+
+```typescript utils/lang.ts
+import { getSupportedLocaleIsoCode, LocaleObject } from '@prezly/theme-kit-core';
+
+export async function importMessages(localeCode: string) {
+    const locale = LocaleObject.fromAnyCode(localeCode);
+    const localeIsoCode = getSupportedLocaleIsoCode(locale);
+    const messages = await import(`@prezly/theme-kit-intl/messages/${localeIsoCode}.json`);
+    return messages.default;
+}
+```
+
+The function resolves the incoming `localeCode` to a supported ISO code, then dynamically imports the matching JSON file from `@prezly/theme-kit-intl`. Dynamic imports allow Next.js to code-split the message bundles — only the active locale's messages are sent to the client.
+
+Use it in any `getServerSideProps`:
+
+```typescript pages/index.tsx
+export const getServerSideProps = getHomepageServerSideProps<BasePageProps>(
+    async (_, { newsroomContextProps }) => ({
+        translations: await importMessages(newsroomContextProps.localeCode),
+    }),
+);
+```
+
+<Note>
+  If you add a new page, always call `importMessages` in its `getServerSideProps` and include `translations` in the returned props. Without it, `IntlProvider` will have no messages and all `FormattedMessage` calls will fall back to their `defaultMessage` values.
+</Note>
+
+## useDisplayedLanguages hook
+
+`hooks/useDisplayedLanguages.ts` returns the subset of configured newsroom languages that are actively used by at least one published story, sorted alphabetically by display name in the current locale.
+
+```typescript hooks/useDisplayedLanguages.ts
+import { getLanguageDisplayName, getUsedLanguages } from '@prezly/theme-kit-core';
+import { useLanguages } from '@prezly/theme-kit-nextjs';
+import { useMemo } from 'react';
+
+export function useDisplayedLanguages() {
+    const languages = useLanguages();
+    return useMemo(() => {
+        if (!languages.length) {
+            return [];
+        }
+
+        return getUsedLanguages(languages).sort((a, b) =>
+            getLanguageDisplayName(a, languages).localeCompare(
+                getLanguageDisplayName(b, languages),
+            ),
+        );
+    }, [languages]);
+}
+```
+
+- **`useLanguages()`** reads all languages configured on the newsroom from the context.
+- **`getUsedLanguages()`** filters out any language that has no published stories associated with it.
+- The result is memoized and sorted so the language switcher is stable and alphabetically consistent regardless of the order languages were added in the dashboard.
+
+The `Footer` uses this hook to render the language switcher. You can use it in any component where you want to display only actively-used languages.
+
+## Locale-aware routing
+
+Next.js locale routing is enabled by the `locales` array in `next.config.js`. Each locale slug corresponds to a URL prefix:
+
+| Locale slug | URL prefix | Example page  |
+| ----------- | ---------- | ------------- |
+| `en`        | `/`        | `/my-story`   |
+| `fr`        | `/fr`      | `/fr/my-story`|
+| `de`        | `/de`      | `/de/my-story`|
+
+When a visitor navigates to `/fr`, Next.js sets the active locale to French, the server-side `localeCode` resolves to `fr_FR`, and `importMessages` loads the French message bundle. All category links, `getCategoryUrl` calls, and `getLinkLocaleSlug` calls in the `Header` automatically include the correct locale prefix.
+
+The `Footer` language switcher links to `/${LocaleObject.fromAnyCode(language.code).toUrlSlug()}` for each active language, which produces the correct locale root path.
+
+<Note>
+  Locale configuration is handled automatically by `withPrezlyConfig` from `@prezly/theme-kit-nextjs/config`, which reads your newsroom's active languages from Prezly and configures Next.js locale routing for you. You do not need to manually maintain a `locales` array in `next.config.js`.
+</Note>
+
+## DEFAULT_LOCALE fallback
+
+`DEFAULT_LOCALE` from `@prezly/theme-kit-core` is the BCP 47 code `"en"`. It serves as the fallback in two places:
+
+1. In `_app.tsx`, when `newsroomContextProps` is `undefined` (error pages), the locale defaults to `DEFAULT_LOCALE` so `IntlProvider` always receives a valid locale.
+2. As the `defaultLocale` prop on `IntlProvider`, which React Intl uses when a message key is missing from the loaded `translations` map.
+
+You do not need to change `DEFAULT_LOCALE` — it is a constant exported by the kit and should not be overridden locally.
+
+## Supported languages
+
+`@prezly/theme-kit-intl` ships pre-translated message files for 40+ languages. When you activate a language in your Prezly dashboard and publish at least one story in that language, the newsroom will automatically:
+
+- Route visitors to the locale-prefixed URL.
+- Load the matching translation bundle via `importMessages`.
+- Display the language in the `Footer` language switcher via `useDisplayedLanguages`.
+- Render all UI strings (navigation labels, form labels, error messages) in the active language using `FormattedMessage`.
+
+To verify which locales are supported, inspect the `node_modules/@prezly/theme-kit-intl/messages/` directory — each `.json` file corresponds to a supported ISO locale code.

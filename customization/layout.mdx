@@ -1,0 +1,201 @@
+---
+title: "Customize the newsroom layout and shell"
+description: "How to customize the Header, Footer, and SubscribeForm submodules, and override per-page SEO title, description, and og:image in your newsroom."
+---
+
+The `Layout` module is the outermost shell rendered on every page of your newsroom. It composes the global `Header`, `SubscribeForm`, and `Footer` submodules, and delegates per-page SEO metadata to the `PageSeo` component from `@prezly/theme-kit-nextjs`. Any structural change to how your newsroom looks globally — navigation links, company boilerplate, subscription prompts — starts here.
+
+## How Layout works
+
+The `Layout` component lives at `modules/Layout/Layout.tsx` and wraps every page's `children` inside a consistent shell:
+
+```tsx modules/Layout/Layout.tsx
+import { PageSeo } from '@prezly/theme-kit-nextjs';
+import type { PropsWithChildren } from 'react';
+
+import { Footer } from './Footer';
+import { Header } from './Header';
+import { SubscribeForm } from './SubscribeForm';
+
+interface Props {
+    description?: string;
+    imageUrl?: string;
+    title?: string;
+}
+
+export function Layout({ children, description, imageUrl, title }: PropsWithChildren<Props>) {
+    return (
+        <>
+            <PageSeo title={title} description={description} imageUrl={imageUrl} />
+            <Header />
+            <main>{children}</main>
+            <SubscribeForm />
+            <Footer />
+        </>
+    );
+}
+```
+
+Render order is fixed: `PageSeo` (injects `<head>` tags), then `Header`, then your page content inside `<main>`, then `SubscribeForm`, then `Footer`.
+
+## Layout props
+
+You pass these optional props to `Layout` from any page component to override the default SEO metadata for that specific page.
+
+| Prop          | Type     | Description                                                                            |
+| ------------- | -------- | -------------------------------------------------------------------------------------- |
+| `title`       | `string` | Overrides the default `<title>` tag and `og:title` meta tag for the page.              |
+| `description` | `string` | Overrides the default `og:description` and `<meta name="description">` for the page.  |
+| `imageUrl`    | `string` | Sets the `og:image` URL used when the page is shared on social media.                  |
+
+When a prop is omitted, `PageSeo` falls back to the newsroom's default title, description, and cover image as configured in your Prezly dashboard.
+
+### Overriding SEO per page
+
+Wrap any page component in `Layout` and pass the relevant props:
+
+```tsx pages/[slug].tsx
+import { Layout } from '@/modules/Layout';
+
+export default function StoryPage({ story }) {
+    return (
+        <Layout
+            title={story.title}
+            description={story.summary}
+            imageUrl={story.header_image?.url}
+        >
+            {/* page content */}
+        </Layout>
+    );
+}
+```
+
+<Tip>
+  For story pages, use the story's `header_image` URL as `imageUrl` so that social shares show the story's lead image rather than the generic newsroom cover.
+</Tip>
+
+## Header submodule
+
+`modules/Layout/Header/Header.tsx` renders a `<header>` element containing the primary site navigation. It pulls data from the newsroom context using hooks from `@prezly/theme-kit-nextjs`:
+
+- **`useCategories()`** — returns the list of published story categories, each rendered as a dropdown link.
+- **`useCurrentLocale()`** — provides the active locale so category URLs are locale-aware via `getCategoryUrl`.
+- **`useAlgoliaSettings()`** — conditionally renders a **Search** link only when an Algolia API key is configured.
+
+```tsx modules/Layout/Header/Header.tsx
+export function Header() {
+    const categories = useCategories();
+    const currentLocale = useCurrentLocale();
+    const getLinkLocaleSlug = useGetLinkLocaleSlug();
+    const { ALGOLIA_API_KEY } = useAlgoliaSettings();
+
+    return (
+        <header>
+            <ul>
+                <li><Link href="/">Home</Link></li>
+                <li>
+                    <FormattedMessage {...translations.categories.title} />
+                    <ul>
+                        {categories.map((category) => (
+                            <li key={category.id}>
+                                <Link
+                                    href={getCategoryUrl(category, currentLocale)}
+                                    locale={getLinkLocaleSlug()}
+                                >
+                                    {getLocalizedCategoryData(category, currentLocale).name}
+                                </Link>
+                            </li>
+                        ))}
+                    </ul>
+                </li>
+                <li>
+                    <Link href="/media">
+                        <FormattedMessage {...translations.mediaGallery.title} />
+                    </Link>
+                </li>
+                {ALGOLIA_API_KEY && (
+                    <li>
+                        <Link href="/search">
+                            <FormattedMessage {...translations.search.title} />
+                        </Link>
+                    </li>
+                )}
+            </ul>
+        </header>
+    );
+}
+```
+
+All navigation labels use `FormattedMessage` with keys from `@prezly/theme-kit-intl`, so they are automatically translated when visitors switch locales.
+
+## Footer submodule
+
+`modules/Layout/Footer/Footer.tsx` renders a `<footer>` element with company information sourced from the newsroom context and a language switcher when multiple locales are active.
+
+- **`useCompanyInformation()`** — provides the company name, about text (rendered as HTML), and postal address from your Prezly newsroom settings.
+- **`useDisplayedLanguages()`** — returns only languages that are actively used by published stories, sorted alphabetically by display name (see [the hook reference below](#language-switcher-in-footer)).
+
+```tsx modules/Layout/Footer/Footer.tsx
+export function Footer() {
+    const companyInformation = useCompanyInformation();
+    const displayedLanguages = useDisplayedLanguages();
+
+    return (
+        <footer>
+            <h2>
+                <FormattedMessage
+                    {...translations.boilerplate.title}
+                    values={{ companyName: companyInformation.name }}
+                />
+            </h2>
+            <div dangerouslySetInnerHTML={{ __html: companyInformation.about }} />
+            <address>{companyInformation.address}</address>
+
+            {displayedLanguages.length > 0 && (
+                <>
+                    <hr />
+                    {displayedLanguages.map((language) => (
+                        <li key={language.code}>
+                            <a href={`/${LocaleObject.fromAnyCode(language.code).toUrlSlug()}`}>
+                                {language.locale.native_name}
+                            </a>
+                        </li>
+                    ))}
+                </>
+            )}
+        </footer>
+    );
+}
+```
+
+The language switcher only renders when two or more languages are in use. Each link navigates to the locale's root path (e.g., `/fr` for French), which Next.js locale routing resolves to the correct homepage.
+
+## SubscribeForm submodule
+
+`modules/Layout/SubscribeForm/SubscribeForm.tsx` renders an email subscription form that redirects visitors to your newsroom's privacy portal. The form is only displayed when `newsroom.is_subscription_form_enabled` is `true` — if you have disabled subscriptions in your Prezly dashboard, this component returns `null` automatically.
+
+Key behaviors:
+
+- **Email validation** is performed client-side before redirect using `validateEmail` from `./utils`, which checks for a non-empty value and a valid email format.
+- **Error clearing** uses a `useEffect` to remove the error message as soon as the user types a valid value, without waiting for form resubmission.
+- **Redirect** calls `getPrivacyPortalUrl(newsroom, currentLocale, { email })` from `@prezly/theme-kit-core`, which constructs the correct per-locale URL to the Prezly privacy portal with the email pre-filled.
+
+To disable the subscribe form globally, turn off subscriptions in your Prezly newsroom settings rather than removing the component from `Layout`.
+
+## PageSeo integration
+
+`PageSeo` from `@prezly/theme-kit-nextjs` reads the newsroom context to inject default `<title>`, `<meta name="description">`, `og:title`, `og:description`, and `og:image` tags into `<head>` on every render. You do not need to add a custom `<Head>` import in your page components — `Layout` handles this for you.
+
+When you pass `title`, `description`, or `imageUrl` props to `Layout`, those values are forwarded directly to `PageSeo` and take precedence over the newsroom-level defaults.
+
+<Note>
+  `PageSeo` is rendered outside the `<Header>` and `<main>` elements — it writes into `<head>` via React's portal mechanism, so the visual page order is unaffected.
+</Note>
+
+## Adding global styles
+
+The `Layout` component and its submodules ship with no CSS classes or stylesheets by default. This is intentional: you have complete control over how your newsroom looks.
+
+<Tip>
+  The best place to add global CSS is `pages/_document.tsx` (for external stylesheets or font links) or a CSS module imported directly into `Layout.tsx`. For Tailwind CSS, add your `@tailwind` directives to the global stylesheet imported in `pages/_app.tsx`.
+</Tip>

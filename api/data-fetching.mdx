@@ -1,0 +1,248 @@
+---
+title: "Server-side data fetching with Prezly Theme Kit"
+description: "How newsroom pages fetch content using server-side props helpers from @prezly/theme-kit-nextjs, and how data flows to React components via context."
+---
+
+Every page in the newsroom fetches its data on the server before rendering. Rather than calling the Prezly SDK directly, pages delegate to purpose-built helpers from `@prezly/theme-kit-nextjs/server`. Each helper handles authentication, content retrieval, and pagination, then injects the results — along with a shared `newsroomContextProps` bundle — into the page as props.
+
+## How global newsroom data is loaded
+
+When Next.js calls `getServerSideProps` on any page, the theme-kit helper fetches two classes of data:
+
+1. **Page-specific data** — the stories, gallery, or category relevant to that URL.
+2. **Newsroom context** — a shared bundle containing the newsroom object, company information, all categories, all language variants, and the current locale.
+
+The page receives both, then passes `newsroomContextProps` to `NewsroomContextProvider` in `_app.tsx`. This makes newsroom-wide data available throughout the component tree via hooks, without prop-drilling.
+
+```tsx
+// pages/_app.tsx
+function App({ Component, pageProps }: AppProps) {
+    const { newsroomContextProps, translations, ...customPageProps } = pageProps as PageProps &
+        BasePageProps;
+
+    const { localeCode } = newsroomContextProps || { localeCode: DEFAULT_LOCALE };
+    const locale = useMemo(() => LocaleObject.fromAnyCode(localeCode), [localeCode]);
+
+    if (!newsroomContextProps) {
+        return <Component {...customPageProps} />;
+    }
+
+    return (
+        <NewsroomContextProvider {...newsroomContextProps}>
+            <IntlProvider
+                locale={locale.toHyphenCode()}
+                defaultLocale={DEFAULT_LOCALE}
+                messages={translations}
+            >
+                <Component {...customPageProps} />
+            </IntlProvider>
+        </NewsroomContextProvider>
+    );
+}
+```
+
+<Note>
+If `newsroomContextProps` is `undefined` — for example, when a 500 error page renders due to missing or invalid credentials — the app skips `NewsroomContextProvider` and renders the component directly. This prevents the error page itself from crashing.
+</Note>
+
+---
+
+## The `BasePageProps` interface
+
+Every page extends `BasePageProps`, which carries locale-specific UI translations:
+
+```typescript
+// types.ts
+export interface BasePageProps {
+    translations: Record<string, any>;
+}
+```
+
+The `translations` object is passed directly to React Intl's `IntlProvider` via the `messages` prop and resolves translation keys used throughout the UI components.
+
+---
+
+## `importMessages` — loading translations
+
+Translations are loaded server-side in every `getServerSideProps` callback using the `importMessages` utility:
+
+```typescript
+// utils/lang.ts
+import { getSupportedLocaleIsoCode, LocaleObject } from '@prezly/theme-kit-core';
+
+export async function importMessages(localeCode: string) {
+    const locale = LocaleObject.fromAnyCode(localeCode);
+    const localeIsoCode = getSupportedLocaleIsoCode(locale);
+    const messages = await import(`@prezly/theme-kit-intl/messages/${localeIsoCode}.json`);
+    return messages.default;
+}
+```
+
+`importMessages` accepts the raw `localeCode` string from `newsroomContextProps`, normalises it to a supported ISO code, and dynamically imports the matching JSON message bundle from `@prezly/theme-kit-intl`. The dynamic `import()` is tree-shaken at build time so only the locale files that are actually used are included in the server bundle.
+
+---
+
+## Server-side props helpers
+
+All helpers follow the same signature: they accept an async callback that receives the Next.js context and the resolved `newsroomContextProps`, and they expect the callback to return extra props merged into the final page props object.
+
+### `getHomepageServerSideProps`
+
+Used in `pages/index.tsx`. Fetches the first page of published stories and their pagination metadata.
+
+```tsx
+// pages/index.tsx
+export const getServerSideProps = getHomepageServerSideProps<BasePageProps>(
+    async (_, { newsroomContextProps }) => ({
+        translations: await importMessages(newsroomContextProps.localeCode),
+    }),
+);
+```
+
+The resolved props contain `stories: Story[]`, `pagination: PaginationProps`, and the full `newsroomContextProps` bundle.
+
+---
+
+### `getStoryPageServerSideProps`
+
+Used in `pages/[slug].tsx`. Resolves a published story by its URL slug.
+
+```tsx
+// pages/[slug].tsx
+export const getServerSideProps = getStoryPageServerSideProps<BasePageProps>(
+    async (_, { newsroomContextProps }) => ({
+        translations: await importMessages(newsroomContextProps.localeCode),
+    }),
+);
+```
+
+The story is not passed as a direct prop. Instead, it is stored in `newsroomContextProps` and retrieved inside the component via `useCurrentStory()`.
+
+---
+
+### `getStoryPreviewPageServerSideProps`
+
+Used in `pages/s/[uuid].tsx`. Fetches a story by UUID regardless of publication status. Returns `isTrackingEnabled: false` to suppress analytics on preview renders.
+
+```tsx
+// pages/s/[uuid].tsx
+export const getServerSideProps = getStoryPreviewPageServerSideProps<BasePageProps>(
+    async (_, { newsroomContextProps }) => ({
+        isTrackingEnabled: false,
+        translations: await importMessages(newsroomContextProps.localeCode),
+    }),
+);
+```
+
+---
+
+### `getCategoryPageServerSideProps`
+
+Used in `pages/category/[slug].tsx`. Resolves a category by slug and fetches the first page of stories within it.
+
+```tsx
+// pages/category/[slug].tsx
+export const getServerSideProps = getCategoryPageServerSideProps<BasePageProps>(
+    async (_, { newsroomContextProps }) => ({
+        translations: await importMessages(newsroomContextProps.localeCode),
+    }),
+);
+```
+
+The resolved category is stored in `newsroomContextProps` and retrieved with `useCurrentCategory()`.
+
+---
+
+### `getGalleryPageServerSideProps`
+
+Used in `pages/media/index.tsx`. Fetches the first page of gallery albums.
+
+```tsx
+// pages/media/index.tsx
+export const getServerSideProps = getGalleryPageServerSideProps<BasePageProps>(
+    async (_, { newsroomContextProps }) => ({
+        translations: await importMessages(newsroomContextProps.localeCode),
+    }),
+);
+```
+
+Props include `galleries: GalleryAlbum[]` and `pagination: PaginationProps`.
+
+---
+
+### `getGalleryAlbumPageServerSideProps`
+
+Used in `pages/media/album/[uuid].tsx`. Fetches a single gallery album by UUID, including its full list of media items.
+
+```tsx
+// pages/media/album/[uuid].tsx
+export const getServerSideProps = getGalleryAlbumPageServerSideProps<BasePageProps>(
+    async (_, { newsroomContextProps }) => ({
+        translations: await importMessages(newsroomContextProps.localeCode),
+    }),
+);
+```
+
+---
+
+### `getSearchPageServerSideProps`
+
+Used in `pages/search.tsx`. Loads newsroom context including the Algolia index configuration needed to initialise the search client.
+
+```tsx
+// pages/search.tsx
+export const getServerSideProps = getSearchPageServerSideProps(
+    async (_, { newsroomContextProps }) => ({
+        translations: await importMessages(newsroomContextProps.localeCode),
+    }),
+);
+```
+
+---
+
+### `getSitemapServerSideProps`
+
+Used in `pages/sitemap.xml.ts`. Queries all published story URLs and writes the HTTP response as an XML sitemap. Takes no callback argument.
+
+```tsx
+// pages/sitemap.xml.ts
+export const getServerSideProps = getSitemapServerSideProps();
+```
+
+---
+
+## `NewsroomContextProvider` — available hooks
+
+Once `NewsroomContextProvider` wraps your component tree, you can access newsroom-wide data anywhere using the following hooks from `@prezly/theme-kit-nextjs`:
+
+| Hook | Returns | Description |
+|---|---|---|
+| `useNewsroom()` | `Newsroom` | The newsroom object (name, UUID, settings) |
+| `useCompanyInformation()` | `CompanyInformation` | Contact details and company metadata |
+| `useCategories()` | `Category[]` | All categories defined in the newsroom |
+| `useLanguages()` | `NewsroomLanguageSettings[]` | All language variants and their locales |
+| `useCurrentLocale()` | `LocaleObject` | The active locale for the current request |
+| `useCurrentStory()` | `ExtendedStory \| undefined` | The story resolved for the current page (story pages only) |
+| `useCurrentCategory()` | `Category \| undefined` | The category resolved for the current page (category pages only) |
+
+<Tip>
+You do not need to pass newsroom context as props between components. Call the relevant hook directly in any component that needs it — `NewsroomContextProvider` makes the data available throughout the tree.
+</Tip>
+
+---
+
+## Pattern summary
+
+Every data-fetching page in the newsroom follows the same three-step pattern:
+
+<Steps>
+  <Step title="Call the theme-kit helper">
+    Export `getServerSideProps` using the appropriate helper for the page type (e.g., `getHomepageServerSideProps`).
+  </Step>
+  <Step title="Load translations in the callback">
+    Inside the async callback, call `importMessages(newsroomContextProps.localeCode)` and return the result as `translations`.
+  </Step>
+  <Step title="Access context in the component">
+    Use `NewsroomContextProvider` hooks (`useCurrentStory`, `useCurrentCategory`, etc.) to read resolved data inside your React component.
+  </Step>
+</Steps>

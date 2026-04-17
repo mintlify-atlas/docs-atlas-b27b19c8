@@ -1,0 +1,211 @@
+---
+title: "React hooks reference for newsroom customization"
+description: "All custom React hooks in the newsroom theme, covering useDisplayedLanguages, useInfiniteGalleriesLoading, useCurrentLocale, useAlgoliaSettings, and more."
+---
+
+The newsroom theme exposes a small set of custom React hooks you can use when building or customizing pages. These hooks sit on top of the lower-level utilities from `@prezly/theme-kit-nextjs` and `@prezly/theme-kit-core`, giving you access to language data, Algolia search configuration, and infinite-loading state without writing the wiring yourself. The sections below document each hook with its signature, what it returns, and a practical example.
+
+---
+
+## useDisplayedLanguages
+
+Returns a sorted array of languages that have at least one published story in your newsroom. Internally it calls `useLanguages()` from `@prezly/theme-kit-nextjs`, filters to only languages in active use via `getUsedLanguages()`, and sorts the result alphabetically by display name using `getLanguageDisplayName()`.
+
+**Source** — `hooks/useDisplayedLanguages.ts`:
+
+```typescript hooks/useDisplayedLanguages.ts
+import { getLanguageDisplayName, getUsedLanguages } from '@prezly/theme-kit-core';
+import { useLanguages } from '@prezly/theme-kit-nextjs';
+import { useMemo } from 'react';
+
+export function useDisplayedLanguages() {
+    const languages = useLanguages();
+    return useMemo(() => {
+        if (!languages.length) {
+            return [];
+        }
+
+        return getUsedLanguages(languages).sort((a, b) =>
+            getLanguageDisplayName(a, languages).localeCompare(
+                getLanguageDisplayName(b, languages),
+            ),
+        );
+    }, [languages]);
+}
+```
+
+### Signature
+
+```typescript
+function useDisplayedLanguages(): LanguageObject[]
+```
+
+### Return type
+
+| Type | Description |
+|------|-------------|
+| `LanguageObject[]` | A memoized, alphabetically sorted array of language objects from `@prezly/sdk`. Returns an empty array when no language data is available. |
+
+Each `LanguageObject` includes at minimum a `locale` code and a display name resolvable via `getLanguageDisplayName`.
+
+### Usage example
+
+The hook is most useful when rendering a language-switcher UI. The following example shows a minimal switcher that lists only languages with published content:
+
+```tsx components/LanguageSwitcher.tsx
+import { useDisplayedLanguages } from '@/hooks';
+import Link from 'next/link';
+
+export function LanguageSwitcher() {
+    const languages = useDisplayedLanguages();
+
+    if (languages.length <= 1) {
+        return null;
+    }
+
+    return (
+        <nav aria-label="Language switcher">
+            {languages.map((lang) => (
+                <Link key={lang.code} href={`/${lang.code}`}>
+                    {lang.locale.native_name}
+                </Link>
+            ))}
+        </nav>
+    );
+}
+```
+
+<Note>
+`useDisplayedLanguages` only returns languages that have at least one published story. If your newsroom has configured a language but published no content in it, that language will not appear in the returned array.
+</Note>
+
+---
+
+## useInfiniteGalleriesLoading
+
+Manages the current page state and fetching logic for infinite-scroll gallery loading. It is exported from `@prezly/theme-kit-nextjs` and used directly inside the `Galleries` module to progressively load more galleries without a page reload.
+
+### Signature
+
+```typescript
+function useInfiniteGalleriesLoading(
+    initialGalleries: NewsroomGallery[],
+    pagination: PaginationProps,
+): {
+    canLoadMore: boolean;
+    galleries: NewsroomGallery[];
+    isLoading: boolean;
+    loadMoreGalleries: () => void;
+}
+```
+
+### Parameters
+
+<ParamField path="initialGalleries" type="NewsroomGallery[]" required>
+  The first page of galleries fetched server-side and passed as initial state.
+</ParamField>
+
+<ParamField path="pagination" type="PaginationProps" required>
+  Pagination metadata — `currentPage`, `itemsTotal`, and `pageSize` — used to determine whether more pages exist.
+</ParamField>
+
+### Return value
+
+<ResponseField name="canLoadMore" type="boolean">
+  `true` when there are additional pages of galleries that have not yet been loaded.
+</ResponseField>
+
+<ResponseField name="galleries" type="NewsroomGallery[]">
+  The accumulated list of galleries loaded so far, starting from `initialGalleries`.
+</ResponseField>
+
+<ResponseField name="isLoading" type="boolean">
+  `true` while a fetch for the next page is in flight.
+</ResponseField>
+
+<ResponseField name="loadMoreGalleries" type="() => void">
+  Call this function to trigger loading the next page and appending results to `galleries`.
+</ResponseField>
+
+### Usage example
+
+The `Galleries` module uses this hook to render a **Load more** button that appends the next page of results:
+
+```tsx modules/Galleries/Galleries.tsx
+import type { NewsroomGallery } from '@prezly/sdk';
+import { type PaginationProps, useInfiniteGalleriesLoading } from '@prezly/theme-kit-nextjs';
+
+interface Props {
+    initialGalleries: NewsroomGallery[];
+    pagination: PaginationProps;
+}
+
+export function Galleries({ initialGalleries, pagination }: Props) {
+    const { canLoadMore, galleries, isLoading, loadMoreGalleries } =
+        useInfiniteGalleriesLoading(initialGalleries, pagination);
+
+    return (
+        <>
+            {galleries.map((gallery) => (
+                <a key={gallery.uuid} href={`/media/album/${gallery.uuid}`}>
+                    {gallery.name}
+                </a>
+            ))}
+
+            {canLoadMore && (
+                <button onClick={loadMoreGalleries} disabled={isLoading}>
+                    {isLoading ? 'Loading…' : 'Load more'}
+                </button>
+            )}
+        </>
+    );
+}
+```
+
+---
+
+## Hooks from @prezly/theme-kit-nextjs
+
+The following hooks are re-exported or consumed throughout the theme. You can import them directly from `@prezly/theme-kit-nextjs` in any page or component.
+
+### useCurrentLocale
+
+Returns the active locale object for the current page, resolved from the Next.js router.
+
+```typescript
+import { useCurrentLocale } from '@prezly/theme-kit-nextjs';
+
+const locale = useCurrentLocale();
+// locale.toHyphenCode() → "en-US"
+// locale.toUnderscoreCode() → "en_US"
+```
+
+### useAlgoliaSettings
+
+Returns the three Algolia environment values your newsroom is configured with. The `Search` module uses this hook to create an `algoliasearch` client at runtime rather than embedding credentials at build time.
+
+```typescript
+import { useAlgoliaSettings } from '@prezly/theme-kit-nextjs';
+
+const { ALGOLIA_APP_ID, ALGOLIA_API_KEY, ALGOLIA_INDEX } = useAlgoliaSettings();
+```
+
+| Returned key | Type | Description |
+|---|---|---|
+| `ALGOLIA_APP_ID` | `string` | Your Algolia application ID. |
+| `ALGOLIA_API_KEY` | `string` | A search-only API key (not an admin key). |
+| `ALGOLIA_INDEX` | `string` | The name of the Algolia index to query. |
+
+### useLanguages
+
+Returns the full array of all configured languages for the newsroom, regardless of whether any stories have been published in them. Use `useDisplayedLanguages` when you only want languages with published content.
+
+```typescript
+import { useLanguages } from '@prezly/theme-kit-nextjs';
+
+const allLanguages = useLanguages();
+```
+
+<Tip>
+Prefer `useDisplayedLanguages` over `useLanguages` when building navigation elements such as language switchers. It automatically filters out empty languages and sorts the result, saving you from doing that manually.
+</Tip>

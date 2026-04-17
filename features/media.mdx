@@ -1,0 +1,107 @@
+---
+title: "Media galleries with infinite scroll"
+description: "Learn how media galleries and albums work in Blevins Holdings Newsroom — gallery listing, album detail pages, and infinite scroll loading."
+---
+
+The media section gives your newsroom a dedicated space for photo galleries and downloadable image albums. A listing page shows all available galleries, and each gallery has its own album page with a full image set and an optional download link. The gallery listing uses infinite scroll so readers can browse without pagination.
+
+## Gallery listing — `/media`
+
+The `/media` route is handled by `pages/media/index.tsx`, which calls `getGalleryPageServerSideProps` to fetch the first page of galleries and their pagination metadata. These are passed to the `Galleries` module as `initialGalleries` and `pagination`.
+
+```tsx
+// pages/media/index.tsx
+const GalleriesPage: FunctionComponent<Props> = ({ galleries, pagination }) => (
+    <Galleries initialGalleries={galleries} pagination={pagination} />
+);
+```
+
+### The Galleries module
+
+`Galleries` uses the `useInfiniteGalleriesLoading` hook from `@prezly/theme-kit-nextjs` to manage the growing list of galleries in client-side state. The hook returns the current `galleries` array, a `canLoadMore` boolean, an `isLoading` flag, and a `loadMoreGalleries` callback.
+
+```tsx
+// modules/Galleries/Galleries.tsx
+export function Galleries({ initialGalleries, pagination }: Props) {
+    const { formatMessage } = useIntl();
+
+    const { canLoadMore, galleries, isLoading, loadMoreGalleries } = useInfiniteGalleriesLoading(
+        initialGalleries,
+        pagination,
+    );
+
+    return (
+        <Layout title={formatMessage(translations.mediaGallery.title)}>
+            {galleries.map((gallery) => (
+                <Link
+                    key={gallery.uuid}
+                    href={`/media/album/${gallery.uuid}`}
+                    style={{ display: 'block' }}
+                >
+                    {gallery.name}
+                </Link>
+            ))}
+
+            {canLoadMore && (
+                <button onClick={loadMoreGalleries}>
+                    {formatMessage(
+                        isLoading ? translations.misc.stateLoading : translations.actions.loadMore,
+                    )}
+                </button>
+            )}
+        </Layout>
+    );
+}
+```
+
+Each gallery links to `/media/album/${gallery.uuid}`. The **Load more** button only appears when `canLoadMore` is `true` and its label switches between the `loadMore` and `stateLoading` translation keys while the next page is fetching.
+
+<Tip>
+The page title is driven by the `translations.mediaGallery.title` key from `@prezly/theme-kit-intl`, so it automatically adapts to the visitor's locale.
+</Tip>
+
+## Individual album — `/media/album/[uuid]`
+
+Album detail pages are served at `/media/album/[uuid]`. The route is handled by `pages/media/album/[uuid].tsx`, which calls `getGalleryAlbumPageServerSideProps` to fetch the full gallery record and passes it to the `Gallery` module.
+
+```tsx
+// pages/media/album/[uuid].tsx
+const GalleryPage: FunctionComponent<Props> = ({ gallery }) => <Gallery gallery={gallery} />;
+```
+
+### The Gallery module
+
+`Gallery` renders the album name as a heading, an optional **Download** link (when the gallery has an Uploadcare group UUID), a divider, and the full album content via `ContentRenderer`.
+
+```tsx
+// modules/Gallery/Gallery.tsx
+export function Gallery({ gallery }: Props) {
+    const { content, images, name, uploadcare_group_uuid } = gallery;
+
+    return (
+        <Layout title={name} imageUrl={getAssetsUrl(images[0].uploadcare_image.uuid)}>
+            <h1>{name}</h1>
+            {uploadcare_group_uuid && (
+                <a href={getUploadcareGroupUrl(uploadcare_group_uuid, name)}>
+                    <FormattedMessage {...translations.actions.download} />
+                </a>
+            )}
+            <hr />
+            <ContentRenderer nodes={JSON.parse(content)} />
+        </Layout>
+    );
+}
+```
+
+`getUploadcareGroupUrl` from `@prezly/theme-kit-core` constructs the Uploadcare group download URL. The `Layout` component receives `imageUrl` built from the first image in the gallery so that Open Graph metadata includes a cover image.
+
+<Note>
+The **Download** link only renders when `uploadcare_group_uuid` is present on the gallery record. If a gallery was created without an Uploadcare group, the link is omitted automatically.
+</Note>
+
+## Routes summary
+
+| Route | Description |
+|---|---|
+| `/media` | Infinite-scroll listing of all galleries |
+| `/media/album/[uuid]` | Individual album with images and optional download |

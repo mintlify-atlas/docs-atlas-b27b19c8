@@ -1,97 +1,78 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "Blevins Holdings Newsroom: Next.js Newsroom Theme"
+description: "A production-ready Next.js newsroom powered by Prezly SDK. Publish stories, manage media galleries, and reach audiences in 40+ languages."
 ---
 
-## Setting up
+Blevins Holdings Newsroom is a Next.js starter theme for building a fully featured newsroom or press hub. Backed by the Prezly SDK, it handles content delivery, category browsing, media galleries, multilingual routing, and Algolia-powered search — so you can focus on your brand's story rather than infrastructure.
 
-Get your documentation site up and running in minutes.
-
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Clone the repo, configure your credentials, and launch a local newsroom in minutes.
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Configuration" icon="gear" href="/configuration">
+    Set your Prezly API key, newsroom UUID, and Algolia credentials via environment variables.
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="Core Features" icon="newspaper" href="/features/stories">
+    Explore stories, categories, media galleries, and real-time search.
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="API Reference" icon="code" href="/api/routes">
+    Review all available routes, hooks, modules, and data-fetching helpers.
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## What's included
 
-Everything you need to create world-class documentation.
+<CardGroup cols={2}>
+  <Card title="Stories & Categories" icon="list" href="/features/stories">
+    Paginated story listings with category filtering and rich content rendering.
+  </Card>
+  <Card title="Media Galleries" icon="images" href="/features/media">
+    Album-based media pages with infinite scroll loading.
+  </Card>
+  <Card title="Multilingual Support" icon="globe" href="/customization/internationalization">
+    Full i18n for 40+ languages powered by React Intl and Prezly translations.
+  </Card>
+  <Card title="Algolia Search" icon="magnifying-glass" href="/features/search">
+    Real-time, locale-aware search with debounced query updates.
+  </Card>
+  <Card title="SEO & Sitemap" icon="chart-line" href="/features/stories">
+    Automatic sitemap.xml, Open Graph tags, and optimized meta descriptions.
+  </Card>
+  <Card title="Flexible Rendering" icon="server" href="/deployment/vercel">
+    Choose between SSR, SSG, or ISR per page using Next.js built-ins.
+  </Card>
+</CardGroup>
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+## Get started in three steps
 
-## Need inspiration?
+<Steps>
+  <Step title="Clone and install">
+    Clone the repository and install dependencies with npm.
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+    ```bash
+    git clone https://github.com/bblevins721/blevins-holdings-newsroom
+    cd blevins-holdings-newsroom
+    npm install
+    ```
+  </Step>
+  <Step title="Configure your credentials">
+    Copy the example environment file and fill in your Prezly API key, newsroom UUID, and Algolia API key.
+
+    ```bash
+    cp .env.example .env.local
+    ```
+  </Step>
+  <Step title="Run the development server">
+    Start the Next.js development server and open the newsroom in your browser.
+
+    ```bash
+    npm run dev
+    ```
+
+    Navigate to `http://localhost:3000` to see your newsroom live.
+  </Step>
+</Steps>
+
+<Note>
+  If you don't have a Prezly account yet, you can use one of the sample newsroom tokens provided in the [configuration guide](/configuration) to explore the theme with real content.
+</Note>

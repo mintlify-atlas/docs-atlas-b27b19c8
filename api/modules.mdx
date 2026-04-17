@@ -1,0 +1,337 @@
+---
+title: "Page modules reference: Stories, Gallery, Search, and more"
+description: "All page-level modules and their TypeScript props, exported from the modules/ directory, with accurate code examples for Stories, Gallery, Search, and more."
+---
+
+Modules are the top-level page components of the newsroom theme. Each module maps to a route — stories listing, individual story, category, media galleries, and so on — and is dynamically imported by Next.js using a default export. You compose pages by passing server-fetched data as props directly to the relevant module, which then handles layout, SEO metadata, and child component orchestration internally. All modules wrap their content in `Layout`, so you do not need to add a wrapper yourself.
+
+---
+
+## Layout
+
+The `Layout` module is the shared shell used by every other module. It renders the site `Header`, injects `PageSeo` metadata, wraps `children` in a `<main>` element, and appends the `SubscribeForm` and `Footer` at the bottom.
+
+### Props
+
+<ParamField path="children" type="React.ReactNode" required>
+  Page content rendered inside the `<main>` element.
+</ParamField>
+
+<ParamField path="title" type="string">
+  Page title used for SEO and the browser tab. Passed to `PageSeo` from `@prezly/theme-kit-nextjs`.
+</ParamField>
+
+<ParamField path="description" type="string">
+  Meta description used for SEO.
+</ParamField>
+
+<ParamField path="imageUrl" type="string">
+  URL of the Open Graph image for social sharing previews.
+</ParamField>
+
+### Usage example
+
+```tsx pages/custom.tsx
+import { Layout } from '@/modules/Layout';
+
+export default function CustomPage() {
+    return (
+        <Layout title="Custom page" description="A custom newsroom page.">
+            <h1>Custom content</h1>
+            <p>Your content goes here.</p>
+        </Layout>
+    );
+}
+```
+
+---
+
+## Stories
+
+Renders the main stories listing page. Internally it uses `PaginatedStories` to display a paginated list of story links. You can swap `PaginatedStories` for `InfiniteStories` by following the commented-out code in `modules/Stories/Stories.tsx`.
+
+### Props
+
+<ParamField path="stories" type="Story[]" required>
+  The stories for the current page, fetched server-side via the Prezly SDK.
+</ParamField>
+
+<ParamField path="pagination" type="PaginationProps" required>
+  Pagination metadata — `currentPage`, `itemsTotal`, and `pageSize` — used by the `Pagination` component.
+</ParamField>
+
+### Usage example
+
+```tsx pages/index.tsx
+import { getHomepageServerSideProps } from '@prezly/theme-kit-nextjs/server';
+import dynamic from 'next/dynamic';
+import { importMessages } from '@/utils';
+import type { BasePageProps } from 'types';
+
+const Stories = dynamic(() => import('@/modules/Stories'), { ssr: true });
+
+export default function IndexPage({ stories, pagination }) {
+    return <Stories stories={stories} pagination={pagination} />;
+}
+
+export const getServerSideProps = getHomepageServerSideProps<BasePageProps>(
+    async (_, { newsroomContextProps }) => ({
+        translations: await importMessages(newsroomContextProps.localeCode),
+    }),
+);
+```
+
+<Note>
+`Stories` is dynamically imported with `next/dynamic` so that it is only loaded when the homepage renders. Data fetching is handled entirely by `getHomepageServerSideProps` — no custom SDK calls are needed.
+</Note>
+
+---
+
+## Story
+
+Renders a full individual story with its title, subtitle, and rich-text content. For stories stored in the older HTML format (`format_version < 3`) it renders raw HTML via `dangerouslySetInnerHTML`. For Slate.js content it delegates rendering to `ContentRenderer`.
+
+### Props
+
+<ParamField path="story" type="ExtendedStory" required>
+  The full story object from `@prezly/sdk`, including `title`, `subtitle`, `content`, and `format_version`. `ExtendedStory` is a superset of `Story` that includes the serialized `content` string.
+</ParamField>
+
+### Usage example
+
+```tsx pages/[slug].tsx
+import { useCurrentStory } from '@prezly/theme-kit-nextjs';
+import { getStoryPageServerSideProps } from '@prezly/theme-kit-nextjs/server';
+import dynamic from 'next/dynamic';
+import type { BasePageProps } from 'types';
+import { importMessages } from '@/utils';
+
+const Story = dynamic(() => import('@/modules/Story'), { ssr: true });
+
+export default function StoryPage() {
+    const currentStory = useCurrentStory();
+    return <Story story={currentStory!} />;
+}
+
+export const getServerSideProps = getStoryPageServerSideProps<BasePageProps>(
+    async (_, { newsroomContextProps }) => ({
+        translations: await importMessages(newsroomContextProps.localeCode),
+    }),
+);
+```
+
+---
+
+## Category
+
+Displays stories filtered to a single category, together with pagination controls. It mirrors the `Stories` module's structure but scopes the listing to the provided `category`. A commented-out `InfiniteStories` block in the source shows how to switch to infinite-scroll loading.
+
+### Props
+
+<ParamField path="category" type="Category" required>
+  The category object from `@prezly/sdk`. Used to display `category.display_name` as the page heading and `category.display_description` as the subtitle.
+</ParamField>
+
+<ParamField path="stories" type="Story[]" required>
+  Stories belonging to this category for the current page.
+</ParamField>
+
+<ParamField path="pagination" type="PaginationProps" required>
+  Pagination metadata for the category story listing.
+</ParamField>
+
+### Usage example
+
+```tsx pages/category/[slug].tsx
+import { useCurrentCategory } from '@prezly/theme-kit-nextjs';
+import { getCategoryPageServerSideProps } from '@prezly/theme-kit-nextjs/server';
+import dynamic from 'next/dynamic';
+import type { BasePageProps } from 'types';
+import { importMessages } from '@/utils';
+
+const Category = dynamic(() => import('@/modules/Category'));
+
+export default function CategoryPage({ stories, pagination }) {
+    const currentCategory = useCurrentCategory();
+    return <Category category={currentCategory!} stories={stories} pagination={pagination} />;
+}
+
+export const getServerSideProps = getCategoryPageServerSideProps<BasePageProps>(
+    async (_, { newsroomContextProps }) => ({
+        translations: await importMessages(newsroomContextProps.localeCode),
+    }),
+);
+```
+
+---
+
+## Galleries
+
+Renders the media galleries index page with infinite-scroll loading. It uses `useInfiniteGalleriesLoading` from `@prezly/theme-kit-nextjs` internally, so you pass only the initial data and pagination — the hook manages subsequent fetches.
+
+### Props
+
+<ParamField path="initialGalleries" type="NewsroomGallery[]" required>
+  The first page of gallery objects from `@prezly/sdk`, fetched server-side.
+</ParamField>
+
+<ParamField path="pagination" type="PaginationProps" required>
+  Pagination metadata used to determine whether more galleries are available to load.
+</ParamField>
+
+### Usage example
+
+```tsx pages/media/index.tsx
+import { getGalleryPageServerSideProps } from '@prezly/theme-kit-nextjs/server';
+import dynamic from 'next/dynamic';
+import type { BasePageProps } from 'types';
+import { importMessages } from '@/utils';
+
+const Galleries = dynamic(() => import('@/modules/Galleries'), { ssr: true });
+
+export default function GalleriesPage({ galleries, pagination }) {
+    return <Galleries initialGalleries={galleries} pagination={pagination} />;
+}
+
+export const getServerSideProps = getGalleryPageServerSideProps<BasePageProps>(
+    async (_, { newsroomContextProps }) => ({
+        translations: await importMessages(newsroomContextProps.localeCode),
+    }),
+);
+```
+
+---
+
+## Gallery
+
+Renders a single media gallery with its name, optional download link (when an Uploadcare group UUID is present), and rich-text description via `ContentRenderer`.
+
+### Props
+
+<ParamField path="gallery" type="NewsroomGallery" required>
+  A gallery object from `@prezly/sdk` including `name`, `content` (serialized Slate.js JSON), `images`, and optionally `uploadcare_group_uuid`.
+</ParamField>
+
+### Usage example
+
+```tsx pages/media/album/[uuid].tsx
+import { getGalleryAlbumPageServerSideProps } from '@prezly/theme-kit-nextjs/server';
+import dynamic from 'next/dynamic';
+import type { BasePageProps } from 'types';
+import { importMessages } from '@/utils';
+
+const Gallery = dynamic(() => import('@/modules/Gallery'), { ssr: true });
+
+export default function GalleryPage({ gallery }) {
+    return <Gallery gallery={gallery} />;
+}
+
+export const getServerSideProps = getGalleryAlbumPageServerSideProps<BasePageProps>(
+    async (_, { newsroomContextProps }) => ({
+        translations: await importMessages(newsroomContextProps.localeCode),
+    }),
+);
+```
+
+---
+
+## Search
+
+Renders the Algolia-powered search page. This module takes no props — all configuration is read at runtime from `useAlgoliaSettings()` and `useCurrentLocale()`. It wraps `InstantSearch` from `react-instantsearch-dom` with a 300 ms debounced URL sync so that search state is reflected in the browser history.
+
+### Props
+
+This module accepts no props.
+
+### Usage example
+
+```tsx pages/search.tsx
+import { getSearchPageServerSideProps } from '@prezly/theme-kit-nextjs/server';
+import dynamic from 'next/dynamic';
+import type { BasePageProps } from 'types';
+import { importMessages } from '@/utils/lang';
+
+const SearchPage = dynamic(() => import('@/modules/Search'), { ssr: true });
+
+export default function SearchResultsPage() {
+    return <SearchPage />;
+}
+
+export const getServerSideProps = getSearchPageServerSideProps(
+    async (_, { newsroomContextProps }) => ({
+        translations: await importMessages(newsroomContextProps.localeCode),
+    }),
+);
+```
+
+<Note>
+The `Search` module requires `ALGOLIA_APP_ID`, `ALGOLIA_API_KEY`, and `ALGOLIA_INDEX` to be configured in your newsroom settings via the Prezly dashboard. Missing values will cause the search client to fail silently.
+</Note>
+
+---
+
+## PaginatedStories
+
+A composable sub-module (also usable as a standalone component) that renders a `StoriesList` followed by a `Pagination` component. Both `Stories` and `Category` use this internally. You can replace it with `InfiniteStories` for continuous-scroll behavior.
+
+### Props
+
+<ParamField path="stories" type="Story[]" required>
+  The stories for the current page to render as linked list items.
+</ParamField>
+
+<ParamField path="pagination" type="PaginationProps" required>
+  Pagination metadata spread directly into the `Pagination` component.
+</ParamField>
+
+### Usage example
+
+```tsx modules/Stories/Stories.tsx
+import { PaginatedStories } from '../PaginatedStories';
+
+// Inside your page module:
+<PaginatedStories stories={stories} pagination={pagination} />
+```
+
+---
+
+## InfiniteStories
+
+A composable sub-module providing continuous-scroll story loading. It uses `useInfiniteStoriesLoading` from `@prezly/theme-kit-nextjs` to append additional pages of stories when the user clicks **Load more**. Optionally scoped to a category.
+
+### Props
+
+<ParamField path="initialStories" type="Story[]" required>
+  The first page of stories fetched server-side, used as the initial state for the hook.
+</ParamField>
+
+<ParamField path="pagination" type="PaginationProps" required>
+  Pagination metadata used to determine whether additional pages of stories exist.
+</ParamField>
+
+<ParamField path="category" type="Category">
+  An optional category to scope story loading. When provided, the hook fetches only stories belonging to this category.
+</ParamField>
+
+### Usage example
+
+```tsx modules/Stories/Stories.tsx
+import { InfiniteStories } from '../InfiniteStories';
+
+// Replace PaginatedStories with InfiniteStories for continuous loading:
+<InfiniteStories
+    initialStories={stories}
+    pagination={pagination}
+/>
+
+// Or scoped to a category:
+<InfiniteStories
+    initialStories={stories}
+    pagination={pagination}
+    category={currentCategory}
+/>
+```
+
+<Tip>
+Both `PaginatedStories` and `InfiniteStories` accept the same `stories` and `pagination` props, so switching between them requires only a component swap with no data-fetching changes.
+</Tip>

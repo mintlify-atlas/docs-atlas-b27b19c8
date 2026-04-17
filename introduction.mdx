@@ -1,0 +1,49 @@
+---
+title: "What is the Blevins Holdings Newsroom Next.js theme?"
+description: "An open-source Next.js newsroom theme backed by Prezly SDK, Algolia real-time search, React Intl, and complete TypeScript support."
+---
+
+Blevins Holdings Newsroom is an open-source Next.js starter theme that gives you a complete, production-ready newsroom out of the box. It connects to a Prezly-managed content backend via the Prezly SDK, so your editorial team can publish stories and manage media while your site automatically reflects those changes — no custom CMS required.
+
+## Key features
+
+The theme ships with four core capability areas. Each is documented in detail in its own guide.
+
+<CardGroup cols={2}>
+  <Card title="Stories" icon="newspaper" href="/features/stories">
+    Paginated story listings with rich content rendering, Open Graph metadata, and support for SSR, SSG, or ISR per page.
+  </Card>
+  <Card title="Categories" icon="folder" href="/features/categories">
+    Category-filtered story pages that automatically reflect your Prezly newsroom's taxonomy.
+  </Card>
+  <Card title="Media galleries" icon="images" href="/features/media">
+    Album-based media pages with infinite-scroll loading powered by `useInfiniteLoading`.
+  </Card>
+  <Card title="Search" icon="magnifying-glass" href="/features/search">
+    Real-time, locale-aware search backed by Algolia InstantSearch.
+  </Card>
+</CardGroup>
+
+## Tech stack
+
+The theme is built on a small set of well-maintained dependencies:
+
+| Layer | Technology |
+|---|---|
+| Framework | [Next.js](https://nextjs.org) 13 (Pages Router) |
+| Content & data | [Prezly SDK](https://github.com/prezly/javascript-sdk) + [Prezly Theme Kit](https://github.com/prezly/theme-kit-nextjs) |
+| Search | [Algolia](https://algolia.com) via `algoliasearch` and `react-instantsearch-dom` |
+| Internationalisation | [React Intl](https://www.npmjs.com/package/react-intl) + [Prezly Themes Translations](https://www.npmjs.com/package/@prezly/theme-kit-intl) |
+| Type safety | TypeScript 5, with strongly-typed content entities from `@prezly/story-content-format` |
+
+## No styles included by design
+
+The theme ships without any CSS framework or stylesheet. This is intentional — it gives you complete freedom to apply your own design system, whether that is plain CSS, Tailwind, CSS Modules, or a component library. If you want a head start on visual design, the [Prezly theme UI Kit Figma file](https://www.figma.com/community/file/1083372101078898157) is a good reference.
+
+## Ready to build?
+
+Follow the quickstart guide to clone the repository, configure your credentials, and run the newsroom locally in a few minutes.
+
+<Card title="Get started" icon="rocket" href="/quickstart">
+  Clone the repo, set your environment variables, and launch your newsroom.
+</Card>

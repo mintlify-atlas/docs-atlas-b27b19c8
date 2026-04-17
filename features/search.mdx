@@ -1,0 +1,164 @@
+---
+title: "Real-time Algolia search for your newsroom"
+description: "Learn how Algolia-powered search works in Blevins Holdings Newsroom — InstantSearch setup, locale filtering, debounced URL sync, and SearchState."
+---
+
+The search feature gives readers a real-time, faceted search experience powered by Algolia. Results update as you type, URL state stays in sync for shareable search links, and results are automatically filtered to the visitor's active locale so content from other languages never leaks through.
+
+## Prerequisites
+
+Before search works you need an Algolia account with your newsroom content indexed. Set the following environment variable so the `Search` module can authenticate with the Algolia API:
+
+```bash
+ALGOLIA_API_KEY=your_algolia_search_only_api_key
+```
+
+The `ALGOLIA_APP_ID` and `ALGOLIA_INDEX` values are read from your Prezly newsroom settings via the `useAlgoliaSettings` hook — you do not need to set them manually.
+
+<Warning>
+Use a **search-only** API key for `ALGOLIA_API_KEY`. Never expose an admin key in a client-side application.
+</Warning>
+
+## The `/search` route
+
+The search page is served at `/search` by `pages/search.tsx`. It calls `getSearchPageServerSideProps` to load newsroom context and i18n messages, then renders the `Search` module.
+
+```tsx
+// pages/search.tsx
+const SearchResultsPage: FunctionComponent<BasePageProps> = () => <SearchPage />;
+
+export const getServerSideProps = getSearchPageServerSideProps(
+    async (_, { newsroomContextProps }) => ({
+        translations: await importMessages(newsroomContextProps.localeCode),
+    }),
+);
+```
+
+## The Search module
+
+The `Search` module wires together Algolia's `InstantSearch` with URL-synced state and locale-aware filtering.
+
+```tsx
+// modules/Search/Search.tsx
+const DEBOUNCE_TIME_MS = 300;
+
+export function Search() {
+    const currentLocale = useCurrentLocale();
+    const { query, push } = useRouter();
+    const [searchState, setSearchState] = useState<SearchState>(queryToSearchState(query));
+    const debouncedSetStateRef = useRef<number>();
+
+    const { ALGOLIA_APP_ID, ALGOLIA_API_KEY, ALGOLIA_INDEX } = useAlgoliaSettings();
+
+    const searchClient = useMemo(
+        () => algoliasearch(ALGOLIA_APP_ID, ALGOLIA_API_KEY),
+        [ALGOLIA_API_KEY, ALGOLIA_APP_ID],
+    );
+
+    function onSearchStateChange(updatedSearchState: SearchState) {
+        window.clearTimeout(debouncedSetStateRef.current);
+        debouncedSetStateRef.current = window.setTimeout(() => {
+            push(`/search?${searchStateToQuery(updatedSearchState)}`, undefined, {
+                shallow: true,
+                locale: currentLocale.toHyphenCode(),
+            });
+        }, DEBOUNCE_TIME_MS);
+        setSearchState(updatedSearchState);
+    }
+
+    return (
+        <Layout>
+            <InstantSearch
+                searchClient={searchClient}
+                indexName={ALGOLIA_INDEX}
+                searchState={searchState}
+                onSearchStateChange={onSearchStateChange}
+                createURL={createUrl}
+            >
+                <Configure
+                    hitsPerPage={6}
+                    filters={`attributes.culture.code:${currentLocale.toUnderscoreCode()}`}
+                />
+                <AlgoliaStateContextProvider>
+                    <Title />
+                    <div style={{ display: 'flex ' }}>
+                        <Sidebar />
+                        <Results />
+                    </div>
+                </AlgoliaStateContextProvider>
+            </InstantSearch>
+        </Layout>
+    );
+}
+```
+
+### Key settings
+
+| Setting | Value | Description |
+|---|---|---|
+| `DEBOUNCE_TIME_MS` | `300` | Milliseconds to wait after the last keystroke before pushing a URL update |
+| `hitsPerPage` | `6` | Number of results returned per Algolia query |
+| Locale filter | `attributes.culture.code:<locale>` | Restricts results to the visitor's active locale |
+
+### Debounced URL sync
+
+Every time the search state changes, `onSearchStateChange` immediately updates local React state (so the UI feels instant) and schedules a shallow `router.push` after 300 ms. The timeout is cleared and restarted on each keystroke, so the URL only updates when the user pauses typing. This prevents excessive browser history entries.
+
+### Locale-aware filtering
+
+The `Configure` component passes a filter string built from the current locale:
+
+```tsx
+filters={`attributes.culture.code:${currentLocale.toUnderscoreCode()}`}
+```
+
+`currentLocale.toUnderscoreCode()` converts a locale like `en-US` to `en_US`, which matches the format stored in your Algolia index under `attributes.culture.code`. This ensures a French-language visitor only sees French stories.
+
+## SearchState type
+
+`SearchState` represents the full Algolia search state that is serialized into and deserialized from the URL query string.
+
+```typescript
+// modules/Search/utils.ts
+export interface SearchState extends Record<string, any> {
+    query: string;
+    page: number;
+    refinementList?: Partial<SearchFacetsState>;
+}
+```
+
+`SearchFacetsState` maps each `FacetAttribute` to an array of selected values:
+
+```typescript
+// modules/Search/types.ts
+export enum FacetAttribute {
+    CATEGORY = 'attributes.categories.name',
+    YEAR = 'attributes.year',
+    MONTH = 'attributes.month',
+}
+
+export type SearchFacetsState = {
+    [k in FacetAttribute]: string[];
+};
+```
+
+Only the three facets above are synced with the URL. The mapping between facet attribute keys and URL parameter names is defined in `utils.ts`:
+
+```typescript
+// modules/Search/utils.ts
+const QUERY_PARAMETER_BY_ATTRIBUTE = {
+    [FacetAttribute.CATEGORY]: 'category',
+    [FacetAttribute.YEAR]: 'year',
+    [FacetAttribute.MONTH]: 'month',
+};
+```
+
+A URL like `/search?query=earnings&category=Finance&year=2024` will produce a `SearchState` with `query: "earnings"` and `refinementList` containing the selected category and year filters.
+
+## URL utility functions
+
+| Function | Description |
+|---|---|
+| `queryToSearchState(urlQuery)` | Converts Next.js `ParsedUrlQuery` into a `SearchState` object |
+| `searchStateToQuery(state)` | Serializes a `SearchState` back to a URL query string |
+| `createUrl(state)` | Prefixes `searchStateToQuery` output with `?` for use with `InstantSearch` |

@@ -1,0 +1,267 @@
+---
+title: "URL routes reference for the newsroom theme"
+description: "All URL routes in the Blevins Holdings Newsroom, including dynamic parameters, data fetching helpers, and the server-side rendering strategy for each."
+---
+
+The newsroom exposes eight URL routes — from the homepage and individual story pages to media galleries, search, and an auto-generated sitemap. Each route maps to a Next.js page file in `pages/` that handles its own data fetching via a server-side props helper from `@prezly/theme-kit-nextjs`.
+
+## Routes overview
+
+| Route | Description |
+|---|---|
+| `/` | Homepage listing stories |
+| `/[slug]` | Individual story page |
+| `/s/[uuid]` | Story preview for unpublished stories |
+| `/category/[slug]` | Category-filtered story listing |
+| `/media` | Galleries listing with infinite scroll |
+| `/media/album/[uuid]` | Individual gallery/album page |
+| `/search` | Algolia-powered search page |
+| `/sitemap.xml` | Auto-generated XML sitemap |
+
+---
+
+## `/` — Homepage
+
+The homepage lists your newsroom's published stories. It uses server-side rendering on every request so that new stories appear immediately without a rebuild.
+
+| Property | Value |
+|---|---|
+| **File** | `pages/index.tsx` |
+| **Rendering** | `getServerSideProps` |
+| **Module** | `@/modules/Stories` |
+| **Props** | `stories`, `pagination` |
+
+**Data fetched:** `getHomepageServerSideProps` retrieves the first page of published stories along with pagination metadata and the shared newsroom context (categories, languages, locale, company information).
+
+```tsx
+// pages/index.tsx
+export const getServerSideProps = getHomepageServerSideProps<BasePageProps>(
+    async (_, { newsroomContextProps }) => ({
+        translations: await importMessages(newsroomContextProps.localeCode),
+    }),
+);
+```
+
+<Note>
+The `Stories` module supports two listing modes — paginated and infinite scroll. See [Stories](/features/stories) for details on switching between them.
+</Note>
+
+---
+
+## `/[slug]` — Individual story page
+
+Each published story is served at a URL derived from its slug, for example `/announcing-q3-results`. The slug comes from the Prezly CMS and is unique within a newsroom.
+
+| Property | Value |
+|---|---|
+| **File** | `pages/[slug].tsx` |
+| **Parameter** | `slug` — the story's URL slug |
+| **Rendering** | `getServerSideProps` |
+| **Module** | `@/modules/Story` |
+
+**Data fetched:** `getStoryPageServerSideProps` looks up the full story by slug and populates `newsroomContextProps`. Inside the component, `useCurrentStory()` retrieves the story from context rather than receiving it as a direct prop.
+
+```tsx
+// pages/[slug].tsx
+const StoryPage: NextPage<BasePageProps> = () => {
+    const currentStory = useCurrentStory();
+    return <Story story={currentStory!} />;
+};
+
+export const getServerSideProps = getStoryPageServerSideProps<BasePageProps>(
+    async (_, { newsroomContextProps }) => ({
+        translations: await importMessages(newsroomContextProps.localeCode),
+    }),
+);
+```
+
+---
+
+## `/s/[uuid]` — Story preview
+
+This route lets you preview an unpublished story using its UUID. Prezly links editors to this URL when they click **Preview** in the CMS.
+
+| Property | Value |
+|---|---|
+| **File** | `pages/s/[uuid].tsx` |
+| **Parameter** | `uuid` — the story's UUID |
+| **Rendering** | `getServerSideProps` |
+| **Module** | `@/modules/Story` |
+
+**Data fetched:** `getStoryPreviewPageServerSideProps` fetches the story by UUID regardless of its publication status. Analytics tracking is explicitly disabled by returning `isTrackingEnabled: false` from the extra-props callback.
+
+```tsx
+// pages/s/[uuid].tsx
+export const getServerSideProps = getStoryPreviewPageServerSideProps<BasePageProps>(
+    async (_, { newsroomContextProps }) => ({
+        isTrackingEnabled: false,
+        translations: await importMessages(newsroomContextProps.localeCode),
+    }),
+);
+```
+
+<Warning>
+Preview URLs are not intended to be publicly indexed. Prezly generates them as shareable links for editorial review only.
+</Warning>
+
+---
+
+## `/category/[slug]` — Category listing
+
+Stories can be grouped into categories in Prezly. Each category gets its own filtered listing page at `/category/[slug]`.
+
+| Property | Value |
+|---|---|
+| **File** | `pages/category/[slug].tsx` |
+| **Parameter** | `slug` — the category slug |
+| **Rendering** | `getServerSideProps` |
+| **Module** | `@/modules/Category` |
+| **Props** | `stories`, `pagination` |
+
+**Data fetched:** `getCategoryPageServerSideProps` resolves the category by slug, fetches the first page of stories in that category, and populates newsroom context. Inside the component, `useCurrentCategory()` retrieves the resolved category from context.
+
+```tsx
+// pages/category/[slug].tsx
+const CategoryPage: FunctionComponent<Props> = ({ stories, pagination }) => {
+    const currentCategory = useCurrentCategory();
+    return <Category category={currentCategory!} stories={stories} pagination={pagination} />;
+};
+
+export const getServerSideProps = getCategoryPageServerSideProps<BasePageProps>(
+    async (_, { newsroomContextProps }) => ({
+        translations: await importMessages(newsroomContextProps.localeCode),
+    }),
+);
+```
+
+---
+
+## `/media` — Galleries listing
+
+The media index page lists all gallery albums in your newsroom. It supports infinite scroll so additional galleries load without a page transition.
+
+| Property | Value |
+|---|---|
+| **File** | `pages/media/index.tsx` |
+| **Rendering** | `getServerSideProps` |
+| **Module** | `@/modules/Galleries` |
+| **Props** | `galleries`, `pagination` |
+
+**Data fetched:** `getGalleryPageServerSideProps` fetches the first page of gallery albums along with pagination metadata. The `Galleries` module uses `useInfiniteGalleriesLoading` to append further albums on demand via the `/api/fetch-galleries` internal API route.
+
+```tsx
+// pages/media/index.tsx
+const GalleriesPage: FunctionComponent<Props> = ({ galleries, pagination }) => (
+    <Galleries initialGalleries={galleries} pagination={pagination} />
+);
+
+export const getServerSideProps = getGalleryPageServerSideProps<BasePageProps>(
+    async (_, { newsroomContextProps }) => ({
+        translations: await importMessages(newsroomContextProps.localeCode),
+    }),
+);
+```
+
+---
+
+## `/media/album/[uuid]` — Individual gallery
+
+Each gallery album is served at `/media/album/[uuid]`, where `uuid` is the album's unique identifier from Prezly.
+
+| Property | Value |
+|---|---|
+| **File** | `pages/media/album/[uuid].tsx` |
+| **Parameter** | `uuid` — the gallery album UUID |
+| **Rendering** | `getServerSideProps` |
+| **Module** | `@/modules/Gallery` |
+| **Props** | `gallery` |
+
+**Data fetched:** `getGalleryAlbumPageServerSideProps` fetches the full album object — including its media items — by UUID.
+
+```tsx
+// pages/media/album/[uuid].tsx
+const GalleryPage: FunctionComponent<Props> = ({ gallery }) => <Gallery gallery={gallery} />;
+
+export const getServerSideProps = getGalleryAlbumPageServerSideProps<BasePageProps>(
+    async (_, { newsroomContextProps }) => ({
+        translations: await importMessages(newsroomContextProps.localeCode),
+    }),
+);
+```
+
+---
+
+## `/search` — Search
+
+The search page provides full-text search across your newsroom's stories, powered by Algolia InstantSearch.
+
+| Property | Value |
+|---|---|
+| **File** | `pages/search.tsx` |
+| **Rendering** | `getServerSideProps` |
+| **Module** | `@/modules/Search` |
+
+**Data fetched:** `getSearchPageServerSideProps` loads newsroom context (including Algolia configuration) needed to initialise the search client on the server.
+
+```tsx
+// pages/search.tsx
+export const getServerSideProps = getSearchPageServerSideProps(
+    async (_, { newsroomContextProps }) => ({
+        translations: await importMessages(newsroomContextProps.localeCode),
+    }),
+);
+```
+
+<Note>
+The search page requires `ALGOLIA_API_KEY` to be set in your environment. The `ALGOLIA_APP_ID` and `ALGOLIA_INDEX` values are read from your Prezly newsroom configuration via `useAlgoliaSettings()` — only the API key must be supplied as an environment variable.
+</Note>
+
+---
+
+## `/sitemap.xml` — Sitemap
+
+The sitemap is generated at request time and lists all publicly accessible story URLs in standard XML sitemap format.
+
+| Property | Value |
+|---|---|
+| **File** | `pages/sitemap.xml.ts` |
+| **Rendering** | `getServerSideProps` |
+| **Output** | XML document |
+
+**Data fetched:** `getSitemapServerSideProps` queries all published story slugs from Prezly and writes the response as a valid XML sitemap. The page component itself renders nothing — the response body is set entirely by the helper.
+
+```tsx
+// pages/sitemap.xml.ts
+const Sitemap: NextPage = () => null;
+
+export const getServerSideProps = getSitemapServerSideProps();
+```
+
+<Note>
+Submit your sitemap URL to Google Search Console as `https://your-domain.com/sitemap.xml`. No additional sitemap configuration is required.
+</Note>
+
+---
+
+## Internal API routes
+
+Two Next.js API routes handle client-side data loading for infinite scroll features. These are not user-facing URLs.
+
+| Route | File | Purpose |
+|---|---|---|
+| `/api/fetch-stories` | `pages/api/fetch-stories.ts` | Loads additional story pages for infinite scroll |
+| `/api/fetch-galleries` | `pages/api/fetch-galleries.ts` | Loads additional gallery pages for infinite scroll |
+
+Both routes are thin re-exports of helpers from `@prezly/theme-kit-nextjs/server`:
+
+```typescript
+// pages/api/fetch-stories.ts
+import { fetchStories } from '@prezly/theme-kit-nextjs/server';
+export default fetchStories;
+```
+
+```typescript
+// pages/api/fetch-galleries.ts
+import { fetchGalleries } from '@prezly/theme-kit-nextjs/server';
+export default fetchGalleries;
+```

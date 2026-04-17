@@ -1,0 +1,234 @@
+---
+title: "Shared components: ContentRenderer, Pagination, and more"
+description: "Reusable components from the components/ directory, including ContentRenderer, Pagination, and StoryPublicationDate, with full prop details and usage examples."
+---
+
+The `components/` directory contains three reusable components that are shared across multiple page modules. Unlike the modules in `modules/`, these components are not page-level — they render discrete pieces of UI and can be imported wherever you need them. Each component is exported from `components/index.ts`, so you can import any of them from `@/components` without reaching into a subdirectory.
+
+---
+
+## ContentRenderer
+
+Wraps `@prezly/content-renderer-react-js` to render Prezly's Slate.js rich-text content. You pass it the parsed JSON content of a story or gallery, and it renders the full document tree using default components for standard nodes, with custom overrides for `VariableNode` and `StoryBookmarkNode`.
+
+**Source** — `components/ContentRenderer/ContentRenderer.tsx`:
+
+```tsx components/ContentRenderer/ContentRenderer.tsx
+import { Component, Renderer } from '@prezly/content-renderer-react-js';
+import type { Node } from '@prezly/story-content-format';
+import { StoryBookmarkNode, VariableNode } from '@prezly/story-content-format';
+import '@prezly/content-renderer-react-js/styles.css';
+
+import { StoryBookmark, Variable } from './components';
+
+interface Props {
+    nodes: Node | Node[];
+}
+
+export function ContentRenderer({ nodes }: Props) {
+    return (
+        <div>
+            <Renderer nodes={nodes} defaultComponents>
+                <Component match={VariableNode.isVariableNode} component={Variable} />
+                <Component
+                    match={StoryBookmarkNode.isStoryBookmarkNode}
+                    component={StoryBookmark}
+                />
+            </Renderer>
+        </div>
+    );
+}
+```
+
+### Props
+
+<ParamField path="nodes" type="Node | Node[]" required>
+  The parsed Slate.js content tree. Pass `JSON.parse(story.content)` or `JSON.parse(gallery.content)` — do not pass the raw JSON string. Accepts either a single root `Node` or an array of top-level `Node` objects, as defined in `@prezly/story-content-format`.
+</ParamField>
+
+### Usage examples
+
+The `Story` module uses `ContentRenderer` for stories stored in the Slate.js format:
+
+```tsx modules/Story/Story.tsx
+import type { ExtendedStory } from '@prezly/sdk';
+import { FormatVersion } from '@prezly/theme-kit-core';
+
+import { ContentRenderer } from '@/components';
+
+export function Story({ story }: { story: ExtendedStory }) {
+    const { content, format_version } = story;
+
+    return (
+        <article>
+            {Number(format_version) >= FormatVersion.SLATEJS && (
+                <ContentRenderer nodes={JSON.parse(content)} />
+            )}
+        </article>
+    );
+}
+```
+
+The `Gallery` module uses it to render gallery descriptions:
+
+```tsx modules/Gallery/Gallery.tsx
+import { ContentRenderer } from '@/components';
+
+export function Gallery({ gallery }) {
+    return (
+        <ContentRenderer nodes={JSON.parse(gallery.content)} />
+    );
+}
+```
+
+<Note>
+`ContentRenderer` only handles Slate.js content (`format_version >= 3`). For legacy HTML stories (`format_version === 2`) the `Story` module uses `dangerouslySetInnerHTML` directly. Always check `format_version` before deciding which renderer to use.
+</Note>
+
+---
+
+## Pagination
+
+Renders a page-based navigation strip with **Previous** and **Next** buttons, numbered page links, and ellipsis gaps for large page counts. Returns `null` when the total number of pages is one or fewer, so you can render it unconditionally without an extra guard.
+
+**Source** — `components/Pagination/Pagination.tsx`:
+
+```tsx components/Pagination/Pagination.tsx
+import type { PaginationProps } from '@prezly/theme-kit-nextjs';
+
+export function Pagination({ itemsTotal, currentPage, pageSize }: PaginationProps) {
+    const totalPages = Math.ceil(itemsTotal / pageSize);
+
+    if (totalPages <= 1) {
+        return null;
+    }
+
+    // Renders Previous, numbered pages with gaps, and Next
+}
+```
+
+### Props
+
+`Pagination` accepts the `PaginationProps` interface from `@prezly/theme-kit-nextjs`:
+
+<ParamField path="itemsTotal" type="number" required>
+  Total number of items across all pages. Used to calculate the page count via `Math.ceil(itemsTotal / pageSize)`.
+</ParamField>
+
+<ParamField path="currentPage" type="number" required>
+  The currently active page number (1-indexed). Used to disable the **Previous** button on page 1 and the **Next** button on the last page.
+</ParamField>
+
+<ParamField path="pageSize" type="number" required>
+  Number of items shown per page. Used together with `itemsTotal` to compute the total page count.
+</ParamField>
+
+### Usage example
+
+`PaginatedStories` spreads the full `pagination` object directly onto `Pagination`:
+
+```tsx modules/PaginatedStories/PaginatedStories.tsx
+import type { Story } from '@prezly/sdk';
+import type { PaginationProps } from '@prezly/theme-kit-nextjs';
+
+import { Pagination } from '@/components';
+import { StoriesList } from '../StoriesList/StoriesList';
+
+interface Props {
+    stories: Story[];
+    pagination: PaginationProps;
+}
+
+export function PaginatedStories({ stories, pagination }: Props) {
+    return (
+        <>
+            <StoriesList stories={stories} />
+            <Pagination {...pagination} />
+        </>
+    );
+}
+```
+
+<Tip>
+Because `Pagination` renders nothing when `totalPages <= 1`, you can safely spread `pagination` onto it without wrapping in a conditional. If there is only one page of results, the component returns `null` automatically.
+</Tip>
+
+---
+
+## StoryPublicationDate
+
+Renders the publication date of a story as a localized string using `react-intl`'s `FormattedDate`. It handles both full `Story` objects from the Prezly SDK and lighter `AlgoliaStory` objects returned from search results. Returns `null` when no publication date is available.
+
+**Source** — `components/StoryPublicationDate/StoryPublicationDate.tsx`:
+
+```tsx components/StoryPublicationDate/StoryPublicationDate.tsx
+import type { Story } from '@prezly/sdk';
+import type { AlgoliaStory } from '@prezly/theme-kit-core';
+import { getStoryPublicationDate } from '@prezly/theme-kit-core';
+import { FormattedDate } from 'react-intl';
+
+interface Props {
+    story: Story | AlgoliaStory;
+}
+
+export function StoryPublicationDate({ story }: Props) {
+    const date = getStoryPublicationDate(story);
+
+    if (!date) {
+        return null;
+    }
+
+    return <FormattedDate value={date} year="numeric" month="long" day="numeric" />;
+}
+```
+
+### Props
+
+<ParamField path="story" type="Story | AlgoliaStory" required>
+  A story object from either the Prezly SDK (`Story`) or an Algolia search result (`AlgoliaStory` from `@prezly/theme-kit-core`). The component uses `getStoryPublicationDate()` to extract the relevant date field from whichever type is provided.
+</ParamField>
+
+### Output format
+
+The date is formatted with `year: "numeric"`, `month: "long"`, and `day: "numeric"`, which produces output like **April 17, 2026** in the `en-US` locale. The exact output respects the active `react-intl` locale provided by your `IntlProvider`.
+
+### Usage example
+
+You can use `StoryPublicationDate` in any story card or list item:
+
+```tsx components/StoryCard.tsx
+import type { Story } from '@prezly/sdk';
+import { StoryPublicationDate } from '@/components';
+import Link from 'next/link';
+
+interface Props {
+    story: Story;
+}
+
+export function StoryCard({ story }: Props) {
+    return (
+        <article>
+            <Link href={`/${story.slug}`}>
+                <h2>{story.title}</h2>
+            </Link>
+            <StoryPublicationDate story={story} />
+        </article>
+    );
+}
+```
+
+Or in a search results list using `AlgoliaStory`:
+
+```tsx components/SearchResult.tsx
+import type { AlgoliaStory } from '@prezly/theme-kit-core';
+import { StoryPublicationDate } from '@/components';
+
+export function SearchResult({ story }: { story: AlgoliaStory }) {
+    return (
+        <div>
+            <p>{story.title}</p>
+            <StoryPublicationDate story={story} />
+        </div>
+    );
+}
+```

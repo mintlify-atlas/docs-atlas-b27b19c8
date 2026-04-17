@@ -1,0 +1,78 @@
+---
+title: "Deploy the Blevins Holdings Newsroom to Vercel"
+description: "Step-by-step guide to deploying the Blevins Holdings Newsroom to Vercel, including environment variable setup and server-side rendering notes."
+---
+
+Vercel is the recommended deployment platform for Next.js applications. It provides zero-configuration deployments, automatic HTTPS, edge caching, and native support for Incremental Static Regeneration (ISR) — all of which the newsroom relies on for fast, reliable delivery of your content.
+
+## One-click deploy
+
+The fastest way to get started is to use the **Deploy with Vercel** button. Click it to import the repository directly into Vercel and be guided through environment variable setup before your first build.
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/git/external?repository-url=https://github.com/prezly/theme-nextjs-starter)
+
+<Note>
+  You still need to supply your Prezly credentials during the import flow. The button imports the repository but does not pre-fill environment variables.
+</Note>
+
+## Manual deployment
+
+If you prefer to connect an existing fork or a private repository, follow these steps.
+
+<Steps>
+  <Step title="Fork or clone the repository">
+    Fork the repository to your own GitHub account, or clone it and push to a new repository:
+
+    ```bash
+    git clone https://github.com/bblevins721/blevins-holdings-newsroom.git
+    cd blevins-holdings-newsroom
+    ```
+
+    Push your fork to GitHub before continuing — Vercel deploys directly from a Git repository.
+  </Step>
+
+  <Step title="Import the project into Vercel">
+    1. Go to [vercel.com/new](https://vercel.com/new) and sign in.
+    2. Click **Add New… → Project**.
+    3. Select your repository from the list and click **Import**.
+    4. Leave the framework preset as **Next.js** — Vercel detects it automatically.
+  </Step>
+
+  <Step title="Set environment variables">
+    Before clicking **Deploy**, expand the **Environment Variables** section and add the following:
+
+    | Variable | Required | Description |
+    |---|---|---|
+    | `PREZLY_ACCESS_TOKEN` | Yes | Your Prezly API key |
+    | `PREZLY_NEWSROOM_UUID` | Yes | UUID of the newsroom to display |
+    | `ALGOLIA_API_KEY` | No | Search-only Algolia key; enables the `/search` page |
+
+    See the [environment variables reference](/deployment/environment-variables) for accepted values and how to find them.
+
+    <Tip>
+      You can use the sample newsroom tokens from the [environment variables reference](/deployment/environment-variables) page to test your deployment before connecting your own Prezly account.
+    </Tip>
+  </Step>
+
+  <Step title="Deploy">
+    Click **Deploy**. Vercel builds the project with `npm run build` and serves the output. The first build typically takes two to three minutes.
+
+    Once the deployment succeeds, Vercel assigns a `.vercel.app` URL. You can add a custom domain from the **Domains** tab in your project settings.
+  </Step>
+</Steps>
+
+## Node.js version
+
+The newsroom requires **Node.js 18.x** (specified in `package.json` `engines`). Vercel defaults to Node 18 for new projects, but you can pin the version explicitly:
+
+1. Open your project on Vercel and go to **Settings → General**.
+2. Scroll to **Node.js Version** and select **18.x**.
+3. Redeploy to apply the change.
+
+## Server-side rendering
+
+All pages in the newsroom use `getServerSideProps` for server-side rendering on every request. This means new stories published in Prezly appear immediately on your site without requiring a rebuild or redeploy — Vercel runs the page's data-fetching function on each request and serves fresh content.
+
+<Tip>
+  Because all routes use server-side rendering, Vercel's Edge Network caches responses based on your cache-control headers. You can add custom `Cache-Control` headers in `next.config.js` to enable response caching for pages that don't change frequently, reducing origin load without sacrificing freshness.
+</Tip>

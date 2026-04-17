@@ -1,0 +1,69 @@
+---
+title: "Configure your Blevins Holdings Newsroom environment"
+description: "A complete reference for every environment variable the newsroom reads, plus how next.config.js wires Prezly into the Next.js build pipeline."
+---
+
+Blevins Holdings Newsroom reads its runtime configuration from environment variables loaded via a `.env.local` file. This page documents every variable, explains what happens when credentials are wrong, and shows the available npm scripts.
+
+## Environment variables
+
+Create a `.env.local` file at the root of the repository (copy `.env.example` to get started). The file is never committed to version control and is loaded automatically by Next.js in development and by your hosting platform in production.
+
+### `PREZLY_ACCESS_TOKEN`
+
+<ParamField path="PREZLY_ACCESS_TOKEN" type="string" required>
+  Your Prezly API key. Found in the **Integrations** section of your Prezly dashboard under **API access**. This token authenticates all requests to the Prezly content API made by Prezly Theme Kit on the server side.
+</ParamField>
+
+### `PREZLY_NEWSROOM_UUID`
+
+<ParamField path="PREZLY_NEWSROOM_UUID" type="string" required>
+  The UUID of the newsroom you want to display. Found in the **Settings** section of your Prezly dashboard. This value identifies which newsroom's stories, categories, languages, and media the theme fetches.
+</ParamField>
+
+### `ALGOLIA_API_KEY`
+
+<ParamField path="ALGOLIA_API_KEY" type="string">
+  Your Algolia search-only API key. This variable is optional — if omitted, the `/search` route will not function. Algolia credentials are also configured in your Prezly newsroom settings, which is where the search index is managed. Use the **search-only** key here, not the admin key.
+</ParamField>
+
+<Warning>
+  If `PREZLY_ACCESS_TOKEN` or `PREZLY_NEWSROOM_UUID` are missing or incorrect, the newsroom context cannot be fetched. In this case `newsroomContextProps` is `undefined` inside `_app.tsx` and Next.js renders a 500 error page instead of the newsroom. Double-check your credentials and restart the development server after making changes to `.env.local`.
+</Warning>
+
+## How `next.config.js` uses Prezly
+
+The `next.config.js` file wraps the Next.js configuration with `withPrezlyConfig` from `@prezly/theme-kit-nextjs`. This wrapper applies Prezly-specific build settings — including image domain allowlists and any required redirects — without requiring manual configuration on your part.
+
+```javascript next.config.js
+const withBundleAnalyzer = require('@next/bundle-analyzer')({
+    enabled: process.env.ANALYZE === 'true',
+});
+const withPrezlyConfig = require('@prezly/theme-kit-nextjs/config')();
+
+module.exports = withBundleAnalyzer(
+    withPrezlyConfig({
+        eslint: {
+            dirs: ['@types', 'components', 'hooks', 'modules', 'pages', 'utils'],
+        },
+    }),
+);
+```
+
+You do not need to edit this file for a standard setup. If you add custom Next.js configuration, pass it inside the `withPrezlyConfig({...})` call so that Prezly's settings are applied on top.
+
+## npm scripts
+
+The following scripts are available in `package.json`:
+
+| Script | Command | Description |
+|---|---|---|
+| `dev` | `next` | Starts the development server with live reload on `http://localhost:3000`. |
+| `build` | `next build` | Compiles and exports a production build. |
+| `lint` | `next lint` | Runs ESLint across all configured source directories. |
+| `typecheck` | `tsc --noEmit --incremental` | Runs the TypeScript compiler without emitting output, catching type errors. |
+| `test` | `npx playwright test` | Runs end-to-end tests with Playwright. |
+
+<Tip>
+  Run `npm run lint && npm run typecheck` together (or `npm run check`) before pushing changes to catch both style and type issues in one pass.
+</Tip>
